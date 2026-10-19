@@ -1,88 +1,36 @@
-# FastAPI & Web Framework
+# 웹 프레임워크·설정
 fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-python-multipart>=0.0.6
 httpx>=0.26.0
-
-# Pydantic (FastAPI dependency)
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
+pyyaml>=6.0.1
 
-# Database Drivers
-sqlalchemy>=2.0.25
-psycopg2-binary>=2.9.9
+# 저장소
 asyncpg>=0.29.0
-pymongo>=4.6.1
-
-# Redis (async support)
 redis[hiredis]>=5.0.1
+qdrant-client>=1.7.0
 
-# Mattermost WebSocket 모니터 (uvicorn[standard]에도 딸려오지만 직접 import하므로 명시)
-websockets>=12.0
-
-# AI LLM Libraries
-langgraph>=0.0.20
-langchain>=0.1.0
-langchain-core>=0.1.0
-langchain-community>=0.0.13
+# 오케스트레이션·관측
+langgraph>=1.1
 langsmith>=0.2.0
 
-# LLM Providers
+# LLM 프로바이더 (Anthropic·vLLM 은 httpx / openai 호환 클라이언트로 부른다)
 google-genai>=1.16.0
 openai>=1.10.0
-
-# Vector Database
-qdrant-client>=1.7.0
-beautifulsoup4>=4.12.0
-lxml>=5.0            # web_fetch HTML 파서(없으면 html.parser 로 폴백 — 느리고 깨진 마크업에 약하다)
-
-
-# Utilities
 tiktoken>=0.5.2
-numpy>=1.26.0
-pandas>=2.1.4
-openpyxl>=3.1.0
-# 워드(.docx) — create_document_file 생성 + 채팅 첨부 읽기 양쪽에 쓴다.
-python-docx>=1.1.0
-# PowerPoint(.pptx) 읽기 — 채팅 첨부. 슬라이드별 도형·표 + 발표자 노트. MIT.
-python-pptx>=0.6.23,<2
-# 한글(.hwp) 읽기 — 채팅 첨부. rhwp-python(MIT). **pyhwp(AGPL-3.0+) 로 되돌리지 말 것.**
-#   휠이 번들한 FreeType 에 COLR/CPAL 심볼이 없어 그대로는 import 가 죽는다 —
-#   docker/app/Dockerfile 이 시스템 FreeType 심볼릭 링크로 덮는다(그 RUN 이 빌드 게이트다).
-#   버전 고정: 휠 내부 경로(rhwp_python.libs)가 바뀌면 그 우회가 통하지 않는다.
-#   (.hwpx 는 ZIP+XML 이라 표준 라이브러리만으로 읽는다 — 의존성 없음)
-rhwp-python==0.8.1
-xlrd>=2.0.1
-# DWG 읽기(거래 문서 D3) — MIT, Rust 코어 읽기 전용. LibreDWG(GPL)·ODA(상업 라이선스) 대신.
-ezdwg==0.16.0
-pyyaml>=6.0.1
-# PDF 도면 래스터화 — SCMS 발주 초안의 도면 판독(app/agents/tools/skills/scms/drawing_read.py).
-#   표제란·주기를 잘라 2차로 다시 읽으려면 픽셀이 있어야 한다 — 크롭을 끄면 중량이
-#   24개 중 3개만 나온다(골드셋 13장 실측). CAD 출력 PDF 는 글자가 윤곽선이라 텍스트
-#   층이 없어 PDF 에서 바로 꺼낼 수도 없다.
-#   pypdfium2 = PDFium(BSD) 바인딩, 휠에 바이너리 번들 — 시스템 패키지 불필요.
-#   **PyMuPDF 로 바꾸지 말 것: AGPL-3.0 이다** (rhwp-python 을 쓰는 이유와 같다).
-#   Pillow 는 pypdfium2 가 PNG 로 내보낼 때 쓴다(bitmap.to_pil) — 없으면 렌더가 죽는다.
-pypdfium2>=4.30.0
-pillow>=10.0.0
 
-# MCP 클라이언트 (mailcow-mcp 등 원격 도구 서버 연동)
-# 상한 고정 필수 — mcp 2.x 의 streamable_http_client 는 (read, write) 2개만 yield 한다
-# (1.x 는 get_session_id 포함 3개). transport.py 의 3-튜플 언패킹이
-# `ValueError: not enough values to unpack (expected 3, got 2)` 로 터지는데, 이건 부팅
-# 시점 MCP 등록 전체를 무너뜨려 **5개 서버 도구가 모두 미등록**된다 — 재시도(최대 6회)가
-# 소진되면 재개되지 않으므로 그 프로세스 내내 "수행 도구가 없습니다" 응답이 나간다.
-# (2026-08-10 개발기 장애: 코드 변경 없이 재빌드만으로 발생.) 2.x 이관은 별건으로 다룬다.
-# MCP 클라이언트 SDK 2.x (프로토콜 2026-07-28). v2 Client 는 서버 시대를 자동 협상해
-# 2025-era 서버(아직 1.x 인 MCP 서버들)와도 그대로 통신한다.
-# ⚠ mcp 2.x 는 httpx 대신 httpx2 를 쓴다. src/agent_arch/agents/tools/mcp/transport.py 가 이를
-#   직접 import 하므로 명시한다(httpx 는 백엔드 나머지 코드가 계속 쓴다 — 둘 다 필요).
+# 웹 본문 파싱
+beautifulsoup4>=4.12.0
+lxml>=5.0            # 없으면 html.parser 로 폴백 — 느리고 깨진 마크업에 약하다
+
+# MCP 클라이언트
+# 상한 고정 필수 — 1.x 와 2.x 는 streamable_http_client 가 yield 하는 튜플 길이가 다르다.
+# 언패킹이 터지면 기동 시 MCP 등록 전체가 무너져 원격 도구가 하나도 붙지 않는다.
 mcp>=2.1.1,<3
+# mcp 2.x 는 httpx 대신 httpx2 를 쓴다. agents/tools/mcp/transport.py 만 httpx2 를 쓰고 나머지는 httpx.
+# httpx.AsyncClient 를 넘기면 예외 없이 조용히 열화한다(서버발 메시지 미도착).
 httpx2>=2.5.0
 
-# Security & Auth
-python-jose[cryptography]>=3.3.0
-
-# Testing
+# 테스트
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
