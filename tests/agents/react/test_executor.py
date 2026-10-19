@@ -239,3 +239,35 @@ class TestExecuteToolsSurvivesToolErrors:
         contents = {tc.name: content for tc, content in results}
         assert contents["boom"].startswith("[ERROR]")
         assert "정상" in contents["fine"]
+
+
+class TestFindToolFallbackGate:
+    """바인딩 목록 밖 폴백 도구도 권한 게이트를 지나야 한다 — 이름만 알면 실행되던 우회 차단."""
+
+    @staticmethod
+    def _def(name: str):
+        from agent_arch.services.api_registry.models import ExternalToolDef
+
+        return ExternalToolDef(
+            tool_name=name, description="t", is_external=1, external_service="hr_service",
+            http_method="GET", endpoint_path="/t/", parameters_schema={"type": "object", "properties": {}},
+            enabled=1,
+        )
+
+    def test_fallback_denied_without_service_access(self, monkeypatch):
+        from agent_arch.agents import context as ctx_mod
+        from agent_arch.agents.react import executor as ex
+
+        monkeypatch.setattr(ex.tool_loader, "get_by_name", lambda n: self._def(n))
+        monkeypatch.setattr(ctx_mod, "get_profile_context", lambda: {"is_guest": False, "permissions": {}})
+        assert find_tool("hr_service_secret_payroll", []) is None
+
+    def test_fallback_allowed_with_service_access(self, monkeypatch):
+        from agent_arch.agents import context as ctx_mod
+        from agent_arch.agents.react import executor as ex
+
+        monkeypatch.setattr(ex.tool_loader, "get_by_name", lambda n: self._def(n))
+        monkeypatch.setattr(ctx_mod, "get_profile_context",
+                            lambda: {"is_guest": False, "permissions": {"hr": ["hr.access"]}})
+        tool = find_tool("hr_service_list_leaves", [])
+        assert tool is not None and tool.name == "hr_service_list_leaves"

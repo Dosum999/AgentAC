@@ -1052,13 +1052,23 @@ async def _regenerate_answer_language(state: ReactState, content: str) -> str:
     return await _enforce_glossary(content, language)
 
 
+def _bound_answer(state: ReactState, raw: str) -> str:
+    """반복 런 접기 → 길이 상한. 최종 답변을 내는 모든 노드가 같은 순서로 거친다.
+
+    모델 반복 루프 잔해(같은 문자 120자+ 런)는 trim **앞에서** 접는다 — loop.py 와 동일 순서.
+    강제 답변 경로(_forced_none_answer)가 이걸 안 거쳐, 반복 붕괴가 max_iterations 소진 턴에서
+    그대로 저장됐다.
+    """
+    content = collapse_repeated_runs(raw)
+    if state["used_tools"] and len(content) > _MAX_RESPONSE_CHARS:
+        logger.warning("[react_graph] oversized response (%d chars) → trim", len(content))
+        content = content[:_MAX_RESPONSE_CHARS] + "\n\n(응답이 너무 길어 일부만 표시됩니다.)"
+    return content
+
+
 async def _answer_node(state: ReactState) -> dict:
     """⑤ 텍스트 최종 답변(비어있지 않음) — oversize trim + 언어 가드 후 LoopResult."""
-    # 모델 반복 루프 잔해(같은 문자 120자+ 런)는 trim **앞에서** 접는다 — loop.py 와 동일 순서.
-    final_content = collapse_repeated_runs("".join(state["text_buf"]))
-    if state["used_tools"] and len(final_content) > _MAX_RESPONSE_CHARS:
-        logger.warning("[react_graph] oversized response (%d chars) → trim", len(final_content))
-        final_content = final_content[:_MAX_RESPONSE_CHARS] + "\n\n(응답이 너무 길어 일부만 표시됩니다.)"
+    final_content = _bound_answer(state, "".join(state["text_buf"]))
     # 목표 언어가 아니면 그 언어로 재생성(도구 없이). C2(guard_phantom_action)와 같은 최종 지점.
     final_content = await _regenerate_answer_language(state, final_content)
     final_content = await _ensure_translation_spellings(state, final_content)
@@ -1174,6 +1184,7 @@ async def _forced_none_answer(
         final_content = empty_msg
         _emit(ProgressEvent("token", content=final_content))
     else:
+        final_content = _bound_answer(state, final_content)
         final_content = await _regenerate_answer_language(state, final_content)
         final_content = await _ensure_translation_spellings(state, final_content)
         final_content, name_guard = await _regenerate_names(state, final_content)
@@ -1324,13 +1335,13 @@ async def _execute_node(state: ReactState) -> dict:
                 elif len(question) > len(str(a.get("query") or "")):
                     tc.arguments = {**a, "query": question}
 
-    # HITL: 승인필요 액션은 confirm=False 강제(초안만). 한 턴 계획분을 기억해 둔다.
+    # HITL: 승인필요 액션은 confirm=False 강제(초안만). 기능 플래그와 무관하게 항상 —
+    # 실제 실행은 /resume(HITL 그래프)에서만. 한 턴 계획분을 기억해 둔다.
     hitl_pending_tcs = []
-    if settings.use_langgraph_hitl:
-        for tc in iter_tool_calls:
-            if requires_approval(tc.name):
-                tc.arguments = {**tc.arguments, "confirm": False}
-                hitl_pending_tcs.append(tc)
+    for tc in iter_tool_calls:
+        if requires_approval(tc.name):
+            tc.arguments = {**tc.arguments, "confirm": False}
+            hitl_pending_tcs.append(tc)
 
     messages.append(Message(
         role="assistant",

@@ -157,12 +157,7 @@ class Settings(BaseSettings):
     enable_parallel_eval: bool = Field(default=False, alias="ENABLE_PARALLEL_EVAL")
     qdrant_top_k: int = Field(default=12, alias="QDRANT_TOP_K")
     agent_timeout: int = Field(default=300, alias="AGENT_TIMEOUT")
-    # HITL(Human-In-The-Loop) — 비가역 액션(메일/메신저/일정/휴가)을 LLM 이 아니라
-    # 코드가 강제로 멈추고(confirm=False 초안 강제 + interrupt 체크포인트) 사람 승인
-    # 후 재개한다. False면 기존 경로(프롬프트 유도 + workspace POST) 그대로.
-    use_langgraph_hitl: bool = Field(default=False, alias="USE_LANGGRAPH_HITL")
-
-    # 장기 사용자 메모리(NapMem Phase 1) — 턴 종료 시 비동기로 memory record를 추출·
+    # 장기 사용자 메모리(Phase 1) — 턴 종료 시 비동기로 memory record를 추출·
     # reconcile·인덱싱한다(agent.memory_records + Qdrant). False(기본)면 추출/저장을
     # 전혀 수행하지 않는다(스케줄 진입점에서 즉시 no-op). 켜기 전 migration_v24 적용 필요.
     enable_user_memory: bool = Field(default=False, alias="ENABLE_USER_MEMORY")

@@ -20,6 +20,7 @@ from agent_arch.agents.hitl.graph import (
 )
 from agent_arch.agents.hitl.resume import (
     ResumeInProgress,
+    StalePendingAction,
     load_pending,
     resume_action,
     resume_guard,
@@ -38,6 +39,7 @@ __all__ = [
     "get_action_graph",
     "interrupt_payload",
     "ResumeInProgress",
+    "StalePendingAction",
     "load_pending",
     "resume_action",
     "resume_guard",

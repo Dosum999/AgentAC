@@ -614,7 +614,7 @@ class ProviderUsage(BaseModel):
     """provider 단위 LLM 토큰 사용량 (UsageResponse.by_provider[i])."""
 
     provider: str = Field(
-        description="LLM provider 식별자 (gemini/vllm/openai/ollama/openclaw/unknown)"
+        description="LLM provider 식별자 (gemini/vllm/openai/ollama/unknown)"
     )
     turns: int = Field(0, description="해당 provider로 실행된 root run(턴) 수")
     prompt_tokens: int = Field(0, description="입력 토큰 합계")

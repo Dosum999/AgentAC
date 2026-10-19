@@ -35,6 +35,15 @@ class ResumeInProgress(RuntimeError):
     """같은 대화의 승인이 이미 처리 중이다. 두 번째 클릭은 여기서 멈춘다."""
 
 
+class StalePendingAction(RuntimeError):
+    """누른 카드가 지금 대기 중인 항목이 아니다(이미 새 카드로 대체됐거나 id 가 빠졌다).
+
+    대화의 "현재" 대기 항목만 보고 재개하면, 앞 카드의 버튼이 뒤에 만든 초안을 실행한다
+    (실측: 스레드 답글마다 새 카드가 생겨 앞 카드 승인이 새 값으로 나갔다). 그래서 카드가
+    실어 보낸 pending_id 와 체크포인트의 현재 항목 id 가 같을 때만 재개한다.
+    """
+
+
 @asynccontextmanager
 async def resume_guard(conversation_id: str) -> AsyncIterator[None]:
     """한 대화의 승인 재개를 한 번에 하나만 통과시킨다.
@@ -217,8 +226,12 @@ async def resume_action(
     *,
     reject: bool = False,
     user_info: Optional[dict] = None,
+    pending_id: Optional[str] = None,
 ) -> dict:
     """현재 액션을 재개한다 — 승인이면 confirm=True 실행, 거절이면 그 액션만 스킵.
+
+    대기 항목에 ``pending_id`` 가 있으면 호출자가 같은 값을 넘겨야 한다. 다르거나 빠지면
+    ``StalePendingAction`` 을 던지고 아무것도 실행하지 않는다(id 없는 항목은 대조하지 않는다).
 
     실행/스킵 후 큐에 다음 항목이 남아 있으면 그 draft 페이로드를 ``next_pending`` 으로 함께
     반환한다(없으면 None=마지막). 호출 전 호출자가 ``set_user_context`` 로 사용자 명의를
@@ -246,6 +259,12 @@ async def resume_action(
             "session_id": user_info.get("session_id"),
         }
     await _restore_if_lost(graph, conversation_id)
+    current = await load_pending(conversation_id)
+    expected = (current or {}).get("pending_id")
+    if expected and pending_id != expected:
+        raise StalePendingAction(
+            f"대기 항목 불일치(conversation={conversation_id}, 카드={pending_id!r}, 현재={expected!r})"
+        )
     final = await graph.ainvoke(
         Command(resume=resume_value), _config(conversation_id, metadata)
     )

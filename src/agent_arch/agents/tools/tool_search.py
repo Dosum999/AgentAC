@@ -17,7 +17,7 @@
     4) react 루프가 iteration 말미 ``drain_discovered_tools()`` 로 비워
        all_tools 에 머지·rebind → 다음 iteration 부터 네이티브 호출
 
-레퍼런스: open-agent-sdk ToolSearch, openclaw tool-search.
+레퍼런스: 공개 에이전트 SDK 의 지연 도구 검색 패턴.
 """
 from __future__ import annotations
 

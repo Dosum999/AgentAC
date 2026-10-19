@@ -975,6 +975,9 @@ class AgentOrchestrator:
         # 대화 ID 를 요청 스코프 ContextVar 에 심는다 — 대화 스코프 Redis stash(영수증 OCR
         # document_body)를 읽고 쓰는 스킬(영수증 판독·문서 상신 래퍼 등)이 참조한다.
         set_conversation_id(conversation_id)
+        # 이번 턴 라우트는 답이 저장될 때 확정 대화 id 로 남긴다(memory/conversation.begin_turn_route).
+        from agent_arch.memory.conversation import begin_turn_route
+        begin_turn_route()
         if _pii_guard_mode() != "off":
             # 가명화 어휘(임직원 디렉터리) 예열 — LLM 호출 직전까지 2초만 기다리고, 늦으면 다음 턴부터 완전해진다.
             from agent_arch.llm.pii.turn import prewarm as _pii_prewarm
@@ -1800,7 +1803,7 @@ class AgentOrchestrator:
                 # 적재해(thread_id=conversation_id) 순차 승인 대기 상태로 둔다. 그리고 카드는
                 # **큐 첫 항목만** emit한다(나머지는 /resume 이 순차 surface). 비-HITL 턴은
                 # 기존대로 모든 action view 를 emit한다(읽기 결과 iframe 등).
-                if settings.use_langgraph_hitl and pending_queue and ctx.conversation_id:
+                if pending_queue and ctx.conversation_id:
                     try:
                         await self._checkpoint_pending_action(
                             ctx.conversation_id, pending_queue

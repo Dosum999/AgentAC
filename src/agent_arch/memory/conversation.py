@@ -22,6 +22,7 @@ PostgreSQL 영구 저장은 save_logged_in_turn()을 통해 처리한다.
 """
 import asyncio
 import json
+from contextvars import ContextVar
 import logging
 import re
 import time
@@ -546,6 +547,35 @@ async def save_last_workspace_artifact(
 # 라우터가 추측하다 틀리면 워커 울타리에 갇힌다 — supervisor 가 follow_up 판정 시 이 목록을 그대로 상속한다.
 # tool_ctx 의 도구명에서 도메인을 역산하던 것(prior_domain)은 멀티 도메인 턴에서 하나만 남아 정보를 잃었다.
 LAST_ROUTE_SUFFIX = "last_route"
+
+
+# 이번 턴 라우트를 답 저장까지 미뤄 두는 자리. supervisor 는 여기에 적기만 하고, 실제 저장은
+# save_logged_in_turn 이 턴을 저장해 대화 id 가 확정된 뒤에 한다. 그래야 (1) 실패해 저장되지 않은
+# 턴의 라우트가 남지 않고 (2) 새 대화 첫 턴(대화 id 가 답 저장 때 생긴다)도 라우트가 남는다.
+# 값은 dict 를 제자리 수정한다 — 자식 Task 에서 적어도 부모로 보인다(ContextVar 는 복사된다).
+_turn_route: ContextVar[Optional[dict]] = ContextVar("turn_route", default=None)
+
+
+def begin_turn_route() -> None:
+    """턴 시작 — 라우트 보류 자리를 새로 연다(orchestrator 가 턴마다 부른다)."""
+    _turn_route.set({})
+
+
+def record_turn_route(domains: List[str]) -> bool:
+    """이번 턴 라우트를 보류해 둔다. 보류 자리가 없으면(턴 밖 호출) False — 호출자가 직접 저장한다."""
+    holder = _turn_route.get()
+    if holder is None:
+        return False
+    holder["domains"] = [d for d in (domains or []) if isinstance(d, str)]
+    return True
+
+
+async def _flush_turn_route(conversation_id: Optional[str]) -> None:
+    holder = _turn_route.get()
+    if not holder or "domains" not in holder or not conversation_id:
+        return
+    domains = holder.pop("domains")
+    await save_last_route(conversation_id, domains)
 
 
 async def save_last_route(conversation_id: Optional[str], domains: List[str], ttl: int = SESSION_TTL) -> None:
@@ -1646,6 +1676,10 @@ async def save_logged_in_turn(
             logger.error(
                 "Redis 히스토리 적재 실패 (conv_id=%s)", conv_id, exc_info=True,
             )
+
+    # 보류해 둔 이번 턴 라우트를 확정된 대화 id 로 저장한다(begin_turn_route 참조).
+    if conv_id and not pos_internal:
+        await _flush_turn_route(conv_id)
 
     # 장기 사용자 메모리 트리거 (fire-and-forget, ENABLE_USER_MEMORY 게이트).
     # PG 저장이 성공(message_id 확정)했을 때만 — provenance 링크가 유효해야 하므로.

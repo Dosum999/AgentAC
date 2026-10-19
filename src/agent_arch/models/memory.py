@@ -1,4 +1,4 @@
-"""장기 사용자 메모리 record 도메인 모델 (NapMem Phase 1).
+"""장기 사용자 메모리 record 도메인 모델 (Phase 1).
 
 agent.memory_records(docker/postgres/migration_v24.sql) 층의 모델.
 저장소=app/db/repository/memory_records.py, 추출/reconcile=app/services/memory/.

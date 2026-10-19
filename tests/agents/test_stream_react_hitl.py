@@ -88,7 +88,6 @@ def _mail_tool() -> MagicMock:
 @pytest.mark.asyncio
 async def test_stream_react_hitl_checkpoints_and_emits_draft(monkeypatch):
     orch = _orchestrator()
-    monkeypatch.setattr("agent_arch.agents.orchestrator.settings.use_langgraph_hitl", True)
 
     mail = _mail_tool()
     monkeypatch.setattr(orch, "_prepare_tools", AsyncMock(return_value=[mail]))

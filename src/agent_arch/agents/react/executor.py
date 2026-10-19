@@ -23,7 +23,7 @@ def find_tool(name: str, all_tools: list):
 
     all_tools에서 찾지 못하면 llm_tools.json 캐시에서 fallback 조회하여
     DynamicAPITool을 즉석 생성한다. Qdrant top_k 검색 누락으로 인한
-    "도구를 찾을 수 없습니다" 에러를 방지한다.
+    "도구를 찾을 수 없습니다" 에러를 방지한다. 폴백 도구도 권한 게이트를 통과해야 한다.
 
     Args:
         name: 검색할 도구 이름
@@ -37,10 +37,21 @@ def find_tool(name: str, all_tools: list):
         return tool
     # fallback: 캐시된 전체 툴 목록에서 이름으로 직접 조회
     tool_def = tool_loader.get_by_name(name)
-    if tool_def is not None:
-        logger.info("[find_tool] fallback로 도구 생성: %s", name)
-        return DynamicAPITool(tool_def)
-    return None
+    if tool_def is None:
+        return None
+    tool = DynamicAPITool(tool_def)  # 생성자가 권한 메타를 인덱스에 등록한다
+    # 폴백은 바인딩(=게이트 통과) 목록 밖에서 도구를 꺼내므로 권한 게이트를 다시 거친다.
+    # 안 거치면 모델이 이름만 알면 권한 없는 도구를 실행할 수 있었다. 막히면 NOT FOUND 로
+    # 돌려 모델이 관문(find_<domain>_tools)으로 정상 발견하게 둔다.
+    from agent_arch.agents.context import get_profile_context
+    from agent_arch.agents.permissions import evaluate
+
+    decision = evaluate(name, get_profile_context())
+    if not decision.allowed:
+        logger.warning("[find_tool] fallback 거부(권한 게이트): %s", name)
+        return None
+    logger.info("[find_tool] fallback로 도구 생성: %s", name)
+    return tool
 
 
 def truncate_result(data: Any, max_items: int = 20) -> Any:

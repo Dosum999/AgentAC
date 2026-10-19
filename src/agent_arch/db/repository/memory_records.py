@@ -1,6 +1,6 @@
 """장기 사용자 메모리 record CRUD (agent.memory_records).
 
-NapMem Phase 1의 memory-records 층. PG=구조화 SoT, 벡터는 Qdrant(app/services/memory).
+Phase 1 의 memory-records 층. PG=구조화 SoT, 벡터는 Qdrant(이전 설계).
 
 소유자 격리: 조회/수정 함수는 SQL WHERE 절에 user_sub 매칭을 강제한다(회사 스코프와
 함께 멀티테넌트 누수를 SQL 레벨에서 차단). 인덱싱 잡(list_unindexed/mark_indexed)만

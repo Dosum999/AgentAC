@@ -7,6 +7,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from agent_arch.agents.hitl import (
+    StalePendingAction,
     get_action_graph,
     load_pending,
     resume_action,
@@ -307,3 +308,37 @@ class TestSurvivesRestart:
         await _checkpoint("res-restart-2")
         self._restart(monkeypatch)
         assert await load_pending("res-restart-2") is None
+
+
+async def _checkpoint_with_id(conversation_id: str, pending_id: str) -> None:
+    graph = get_action_graph()
+    await graph.ainvoke(
+        {"pending_action": {**_pending(), "pending_id": pending_id}},
+        {"configurable": {"thread_id": conversation_id}},
+    )
+
+
+class TestPendingIdMatch:
+    """카드의 pending_id 가 현재 대기 항목과 같을 때만 재개한다 — 앞 카드가 새 초안을 실행하지 않게."""
+
+    @pytest.mark.asyncio
+    async def test_matching_id_executes(self, mail_tool):
+        await _checkpoint_with_id("pid-ok", "p-1")
+        result = await resume_action("pid-ok", {}, pending_id="p-1")
+        assert result["success"] is True
+        mail_tool.execute.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_mismatched_id_is_refused_and_nothing_runs(self, mail_tool):
+        await _checkpoint_with_id("pid-stale", "p-new")
+        with pytest.raises(StalePendingAction):
+            await resume_action("pid-stale", {}, pending_id="p-old")
+        mail_tool.execute.assert_not_awaited()
+        assert (await load_pending("pid-stale"))["pending_id"] == "p-new"  # 대기 상태 그대로
+
+    @pytest.mark.asyncio
+    async def test_missing_id_is_refused_when_item_has_one(self, mail_tool):
+        await _checkpoint_with_id("pid-missing", "p-1")
+        with pytest.raises(StalePendingAction):
+            await resume_action("pid-missing", {})
+        mail_tool.execute.assert_not_awaited()

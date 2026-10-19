@@ -67,7 +67,6 @@ def _wire(orch, monkeypatch, tools):
     monkeypatch.setattr(orch, "_build_messages", AsyncMock(return_value=[Message(role="user", content="continue")]))
     monkeypatch.setattr(orch, "_prepare_tools", AsyncMock(return_value=tools))
     monkeypatch.setattr("agent_arch.agents.orchestrator.get_profile", AsyncMock(return_value=None))
-    monkeypatch.setattr("agent_arch.agents.orchestrator.settings.use_langgraph_hitl", True)
 
 
 @pytest.mark.asyncio

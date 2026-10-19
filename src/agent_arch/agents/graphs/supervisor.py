@@ -306,10 +306,13 @@ async def _load_prior_domains(conversation_id: Optional[str]) -> List[str]:
 
 
 async def _save_route(conversation_id: Optional[str], domains: List[str]) -> None:
-    if not conversation_id:
-        return
+    """라우트를 남긴다. 턴 안이면 답 저장 때까지 보류하고(record_turn_route), 턴 밖이면 바로 저장한다."""
     try:
-        from agent_arch.memory.conversation import save_last_route
+        from agent_arch.memory.conversation import record_turn_route, save_last_route
+        if record_turn_route(domains):
+            return
+        if not conversation_id:
+            return
         await save_last_route(conversation_id, domains)
     except Exception:
         logger.debug("[supervisor] last_route 저장 실패(무시)", exc_info=True)
@@ -1247,6 +1250,25 @@ def _has_drive_signal(*texts: Optional[str], talk_lookup: bool = False) -> bool:
     return False
 
 
+
+async def _gather_workers(domains: List[str], coros: list) -> List[Tuple[str, Optional[LoopResult]]]:
+    """워커들을 병렬로 돌리되 한 워커의 예외가 나머지 결과를 날리지 않게 한다.
+
+    예외 난 워커는 (domain, None) — "스코프 0" 과 같은 자리로 떨어진다. 전부 실패하면 호출부의
+    기존 규칙대로 fallback 으로 간다. 취소(CancelledError)는 사용자 중단이라 그대로 올린다.
+    """
+    out = await asyncio.gather(*coros, return_exceptions=True)
+    results: List[Tuple[str, Optional[LoopResult]]] = []
+    for d, r in zip(domains, out):
+        if isinstance(r, asyncio.CancelledError):
+            raise r
+        if isinstance(r, BaseException):
+            logger.error("[supervisor] worker domain=%s 예외 — 이 워커만 제외: %r", d, r, exc_info=r)
+            results.append((d, None))
+        else:
+            results.append(r)
+    return results
+
 def _split_deferred(plan: RoutePlan, user_input: str) -> Tuple[List[str], List[str]]:
     """(지금 실행할 도메인, 뒤로 미룰 도메인). 미룸은 talk+drive 조회쌍에서만 일어난다.
 
@@ -1331,14 +1353,14 @@ async def run_supervisor(
             for d in ds
         ]
 
-    results = list(await asyncio.gather(*_spawn(domains)))
+    results = await _gather_workers(domains, _spawn(domains))
     if deferred:
         primary = next((r for d, r in results if d == _PRIMARY_KNOWLEDGE_DOMAIN), None)
         if _worker_found_something(primary):
             logger.info("[supervisor] %s 에서 근거 확보 → %s 생략", _PRIMARY_KNOWLEDGE_DOMAIN, deferred)
         else:
             logger.info("[supervisor] %s 근거 없음 → %s 로 확장", _PRIMARY_KNOWLEDGE_DOMAIN, deferred)
-            results += list(await asyncio.gather(*_spawn(deferred)))
+            results += await _gather_workers(deferred, _spawn(deferred))
     ok_results = [(d, r) for d, r in results if r is not None]
 
     if not ok_results:
@@ -1546,7 +1568,7 @@ async def stream_supervisor(
             for d in ds
         ]
 
-    results = list(await asyncio.gather(*_spawn(domains)))
+    results = await _gather_workers(domains, _spawn(domains))
     if deferred:
         primary = next((r for d, r in results if d == _PRIMARY_KNOWLEDGE_DOMAIN), None)
         if _worker_found_something(primary):
@@ -1556,7 +1578,7 @@ async def stream_supervisor(
             logger.info("[supervisor] (stream) %s 근거 없음 → %s 로 확장",
                         _PRIMARY_KNOWLEDGE_DOMAIN, deferred)
             yield ProgressEvent("thinking", content="메신저에서 못 찾아 드라이브도 확인할게요...")
-            results += list(await asyncio.gather(*_spawn(deferred)))
+            results += await _gather_workers(deferred, _spawn(deferred))
     ok_results = [(d, r) for d, r in results if r is not None]
 
     if not ok_results:

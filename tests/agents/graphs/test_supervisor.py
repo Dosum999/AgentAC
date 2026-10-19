@@ -1534,3 +1534,43 @@ def test_draft_note_uses_card_note_when_given():
     assert _sup._draft_note(own) == "엑셀 2개를 확인했어요."
     assert _sup._draft_note([{"tool_name": "mail_send_message", "draft_view": {}}]) == _sup._DRAFT_NOTE
     assert _sup._draft_note([{"tool_name": "x", "draft_view": None}]) == _sup._DRAFT_NOTE
+
+
+@pytest.mark.asyncio
+async def test_one_worker_exception_keeps_other_workers():
+    """병렬 워커 하나가 예외로 죽어도 나머지 워커 결과로 답한다 — gather 가 전체를 날리지 않는다."""
+    router = _llm_json('{"domains":["hr","talk"],"subqueries":{"hr":"연차","talk":"공유"},"confidence":0.9}')
+    main = MagicMock()
+    main.invoke = AsyncMock()
+    main.bind_tools = AsyncMock()
+
+    async def resolve(subquery, domain):
+        if domain == "talk":
+            raise RuntimeError("talk 도구 서버 장애")
+        return [_make_tool(f"{domain}_tool")]
+
+    r = await run_supervisor(
+        main, "연차 확인하고 공유해줘", [Message(role="user", content="q")],
+        resolve_tools_fn=resolve, make_worker_llm_fn=_wllm_factory(_single_answer_specs),
+        fallback_fn=AsyncMock(), router_llm=router, max_iterations=3,
+    )
+    assert r is not None and r.content            # hr 워커 결과가 살아 있다
+    main.invoke.assert_not_awaited()              # 남은 워커 1개 → 합성 없이 그대로
+
+
+@pytest.mark.asyncio
+async def test_all_workers_failing_falls_back():
+    """워커가 전부 예외면 기존 규칙대로 fallback."""
+    router = _llm_json('{"domains":["hr","talk"],"subqueries":{"hr":"연차","talk":"공유"},"confidence":0.9}')
+    sentinel = LoopResult(content="fallback 답변", finish_reason="stop")
+    fb = AsyncMock(return_value=sentinel)
+
+    async def resolve(subquery, domain):
+        raise RuntimeError("도구 서버 장애")
+
+    r = await run_supervisor(
+        MagicMock(), "연차 확인하고 공유해줘", [Message(role="user", content="q")],
+        resolve_tools_fn=resolve, make_worker_llm_fn=_wllm_factory(_single_answer_specs),
+        fallback_fn=fb, router_llm=router, max_iterations=3,
+    )
+    assert r is sentinel

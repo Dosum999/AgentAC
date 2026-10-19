@@ -81,7 +81,6 @@ class TestHitlGate:
     @pytest.mark.asyncio
     async def test_flag_on_forces_draft_and_pauses(self, monkeypatch):
         """flag ON + 승인필요 도구 → confirm=False 강제, pending_action, action_pending."""
-        monkeypatch.setattr(loop_mod.settings, "use_langgraph_hitl", True)
         tool = _action_tool("mail_send_message")
         tc = ToolCall(
             id="id1",
@@ -105,7 +104,6 @@ class TestHitlGate:
     @pytest.mark.asyncio
     async def test_flag_on_does_not_gate_read_tools(self, monkeypatch):
         """flag ON 이라도 읽기 도구는 게이트 미적용 — 평소처럼 루프 진행."""
-        monkeypatch.setattr(loop_mod.settings, "use_langgraph_hitl", True)
         tool = _read_tool("search_colleagues")
         _, result = await _run(
             _llm(_tool_calls([ToolCall(id="r1", name="search_colleagues", arguments={})]), _text("결과입니다")),
@@ -118,7 +116,6 @@ class TestHitlGate:
     @pytest.mark.asyncio
     async def test_flag_on_collects_all_approval_drafts_into_queue(self, monkeypatch):
         """한 턴에 승인필요 액션 2개면 둘 다 pending_queue 에 담고 첫 draft에서 return 안 함."""
-        monkeypatch.setattr(loop_mod.settings, "use_langgraph_hitl", True)
         mail = _action_tool("mail_send_message")
         dm = _action_tool("mattermost_skill_send_dm")
         tc1 = ToolCall(id="t1", name="mail_send_message", arguments={"to": ["a@b.c"], "subject": "s", "body": "b", "confirm": True})
@@ -139,7 +136,6 @@ class TestHitlGate:
     async def test_flag_on_no_draft_view_does_not_pause(self, monkeypatch):
         """승인필요 도구가 실행됐어도 draft view 가 없으면(미발견/에러) 멈추지 않고
         루프를 이어 LLM 이 복구하게 둔다 — 멈춤·빈응답 버그 회귀 방지."""
-        monkeypatch.setattr(loop_mod.settings, "use_langgraph_hitl", True)
         tool = MagicMock()
         tool.name = "mail_send_message"
         tool.execute = AsyncMock(return_value=ToolResult(success=False, output=None, error="도구 미발견"))
@@ -154,14 +150,11 @@ class TestHitlGate:
         assert kwargs["confirm"] is False
 
     @pytest.mark.asyncio
-    async def test_flag_off_keeps_legacy_path(self, monkeypatch):
-        """flag OFF → 게이트 없음. LLM 이 준 confirm 그대로, pending_action 없음."""
-        monkeypatch.setattr(loop_mod.settings, "use_langgraph_hitl", False)
+    async def test_llm_confirm_true_is_overridden(self, monkeypatch):
+        """LLM 이 confirm=True 로 불러도 코드가 초안으로 바꾼다 — 기능 플래그 없이 항상."""
         tool = _action_tool("mail_send_message")
         tc = ToolCall(id="id1", name="mail_send_message", arguments={"confirm": True})
         _, result = await _run(_llm(_tool_calls([tc]), _text("발송했습니다")), [tool])
 
-        assert result.pending_action is None
-        assert result.finish_reason != "action_pending"
         _, kwargs = tool.execute.call_args
-        assert kwargs.get("confirm") is True  # 강제하지 않음 (기존 동작 보존)
+        assert kwargs.get("confirm") is False

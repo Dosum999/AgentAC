@@ -375,12 +375,13 @@ async def react_loop_events(
         # 실행 흐름을 그대로 태운 뒤 '유효한 draft view'가 나온 것들만 큐로 묶어 일시
         # 정지한다(아래). view 없는 항목(미발견/에러)은 큐에서 제외 → 1건도 없으면
         # 멈추지 않고 루프를 이어 LLM 이 복구하게 둔다.
+        # 기능 플래그와 무관하게 항상 강제한다 — 플래그가 꺼진 배포에서 비가역 액션이 승인 없이
+        # 나가는 구멍이 있었다. 실제 실행은 /resume(HITL 그래프)에서만 일어난다.
         hitl_pending_tcs = []
-        if settings.use_langgraph_hitl:
-            for tc in iter_tool_calls:
-                if requires_approval(tc.name):
-                    tc.arguments = {**tc.arguments, "confirm": False}
-                    hitl_pending_tcs.append(tc)
+        for tc in iter_tool_calls:
+            if requires_approval(tc.name):
+                tc.arguments = {**tc.arguments, "confirm": False}
+                hitl_pending_tcs.append(tc)
 
         messages.append(Message(
             role="assistant",

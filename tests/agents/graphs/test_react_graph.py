@@ -226,7 +226,7 @@ async def test_parity_max_iterations_force_answer():
 async def test_hitl_deferred_pause_after_reads():
     """승인 도구는 즉시 pause 안 함(초안 누적) → LLM 이 나머지(조회/요약)를 마치고 최종 답변
     시점에 action_pending 으로 전환. 그래프 전용(레거시 loop 는 즉시 pause — 의도적 분기)."""
-    with patch.object(settings, "use_langgraph_hitl", True):
+    with nullcontext():
         result = await run_react_graph(
             _make_llm([
                 # iter0: 승인 도구(calendar_create) 호출 → 초안 누적(pause 안 함)
@@ -327,7 +327,7 @@ async def _collect_graph_stream(input, max_iterations, stream_specs, tools):
 @pytest.mark.parametrize("sid, spec", _STREAM_SCENARIOS, ids=[s[0] for s in _STREAM_SCENARIOS])
 @pytest.mark.asyncio
 async def test_stream_parity(sid, spec):
-    ctx = patch.object(settings, "use_langgraph_hitl", True) if spec["hitl"] else nullcontext()
+    ctx = nullcontext()
     with ctx:
         lp, lr = await _collect_loop_stream(
             spec["input"], spec["max_iterations"], spec["stream_specs_factory"](), spec["tools_factory"](),
@@ -1561,3 +1561,23 @@ def test_verifier_counts_previous_turn_values_as_supported():
              "history_evidence": hist}
     f = _V.collect_facts(state, "오늘 1,538.04원(서울외국환중개) [smbs](http://www.smbs.biz/ExRate/TodayExRate.jsp), 시장 1,548.29원, 1,777.77원")
     assert f["numbers_not_in_results"] == ["1,777.77"] and f["answer_urls_not_in_results"] == []
+
+
+@pytest.mark.asyncio
+async def test_force_answer_node_folds_repeat_runs_and_trims():
+    """강제 답변 경로도 반복 런 접기와 길이 상한을 거친다 — 반복 붕괴가 그대로 저장되던 구멍."""
+    from agent_arch.agents.react.loop import _MAX_RESPONSE_CHARS
+
+    runaway = "| 항목 | 값 |\n| :" + "-" * (_MAX_RESPONSE_CHARS + 5000)
+    llm = _make_llm([
+        stream_tool_calls([ToolCall(id="t1", name="lookup", arguments={})], usage=_U1),
+        stream_text(runaway, usage=_U2),
+    ])
+    llm.invoke = AsyncMock(return_value=MagicMock(content=runaway))
+
+    _, result = await _collect_graph(
+        llm, [_make_tool("lookup", output={"rows": []})], max_iterations=1, input="표로 정리해줘"
+    )
+
+    assert len(result.content) < _MAX_RESPONSE_CHARS
+    assert "-" * 200 not in result.content
