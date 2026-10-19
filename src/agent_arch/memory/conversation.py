@@ -21,6 +21,7 @@ PostgreSQL 영구 저장은 save_logged_in_turn()을 통해 처리한다.
     재발동하면 덮어쓰기된다.
 """
 import asyncio
+import hashlib
 import json
 from contextvars import ContextVar
 import logging
@@ -48,6 +49,16 @@ logger = logging.getLogger(__name__)
 # 전역 폴백 — 사용자가 개인설정을 등록하지 않은 경우(또는 게스트)에만 사용한다.
 MAX_HISTORY = 20  # 최대 저장 메시지 수 (= 10턴)
 SESSION_TTL = 86400  # 24시간 (초)
+
+# tool_ctx 를 도구 없는 턴 몇 번까지 살려 둘지. 되묻기 1~2턴 동안은 대상(직전 조회 결과)이 필요하지만,
+# 그 뒤에도 남기면 주제가 바뀐 대화에 오래된 결과가 끼어든다.
+TOOL_CTX_MAX_IDLE_TURNS = 2
+
+
+def _turn_anchor(user_input: str) -> str:
+    """tool_ctx 를 만든 턴의 user 메시지를 이력에서 다시 찾기 위한 지문."""
+    return hashlib.sha1((user_input or "").encode("utf-8")).hexdigest()[:16]
+
 
 # 직전 1턴 도구 컨텍스트 캐싱 — tool_ctx 키에 저장하는 tool_result content 의 최대 길이.
 #
@@ -1224,6 +1235,21 @@ async def load_history(
         )
         return messages
 
+    # 도구 결과는 그것을 만든 턴의 user 메시지 바로 뒤에 둔다. 마지막 user 뒤에 붙이면, 도구 없는
+    # 턴(되묻기 등)을 지난 뒤 오래된 결과가 직전 질문을 위해 조회한 것처럼 보였다.
+    anchor = tool_ctx.get("anchor")
+    if anchor:
+        anchor_idx = next(
+            (i for i in range(len(messages) - 1, -1, -1)
+             if messages[i].role == "user" and _turn_anchor(messages[i].content or "") == anchor),
+            None,
+        )
+        if anchor_idx is None:
+            # 만든 턴이 압축·트림으로 이력에서 빠졌다 — 붙일 자리가 없으면 주입하지 않는다.
+            logger.debug("tool_ctx 의 원 턴이 이력에 없음 (key=%s) — 주입 스킵", key)
+            return messages
+        last_user_idx = anchor_idx
+
     tool_calls = tool_ctx["tool_calls"]
     tool_results = tool_ctx.get("tool_results", [])
 
@@ -1278,10 +1304,10 @@ async def append_turn(
         설정이 자동 반영된다.
 
         tool_calls 가 없으면(도구 호출 없는 응답 — 주로 되물음·확인 질문) 이전
-        tool_ctx 를 삭제하지 않고 TTL 만 history LIST 와 맞춰 갱신한다. 되묻는 턴이
-        직전에 조회한 대상(초점 엔티티)을 지워버려 후속 "방금 것" 이 초점을 잃던
-        멀티턴 그라운딩 실패를 막기 위함이다. 새 도구 턴이 오면 덮어쓰이고, 아니면
-        TTL 로 만료된다.
+        tool_ctx 를 바로 지우지 않는다. 되묻는 턴이 직전에 조회한 대상(초점 엔티티)을
+        지워버려 후속 "방금 것" 이 초점을 잃던 멀티턴 그라운딩 실패를 막기 위함이다.
+        다만 도구 없는 턴이 TOOL_CTX_MAX_IDLE_TURNS 를 넘으면 버리고, 주입은 그 결과를
+        만든 턴(anchor) 바로 뒤에 한다.
 
     Args:
         key: 완전한 Redis 키.
@@ -1319,6 +1345,8 @@ async def append_turn(
             "tool_calls": tool_calls,
             "tool_results": trimmed_results,
             "saved_at": int(time.time()),
+            "anchor": _turn_anchor(user_input),
+            "idle_turns": 0,
         }
         await redis_store.set(tool_ctx_key, payload, expire=ttl)
         logger.debug(
@@ -1331,8 +1359,15 @@ async def append_turn(
         # 턴(도구 미호출)이 바로 그 대상(직전 조회한 엔티티)을 지워버려, 사용자가
         # "방금 것" 이라 답해도 초점을 잃는 멀티턴 그라운딩 실패가 있었다. 삭제 대신
         # TTL 을 history LIST 와 맞춰 갱신해 대화가 이어지는 동안 조기 만료를 막는다.
-        # 새 도구 턴이 오면 위 분기에서 덮어쓰이고, 아니면 TTL 로 만료된다.
-        await redis_store.expire(tool_ctx_key, ttl)
+        # 새 도구 턴이 오면 위 분기에서 덮어쓰인다. 도구 없는 턴이 TOOL_CTX_MAX_IDLE_TURNS 를 넘으면
+        # 버린다 — 주제가 바뀐 뒤에도 남아 직전 도메인·sticky 판단을 오래된 턴 기준으로 끌고 갔다.
+        prev = await redis_store.get(tool_ctx_key)
+        if isinstance(prev, dict) and prev.get("tool_calls"):
+            idle = int(prev.get("idle_turns") or 0) + 1
+            if idle > TOOL_CTX_MAX_IDLE_TURNS:
+                await redis_store.delete(tool_ctx_key)
+            else:
+                await redis_store.set(tool_ctx_key, {**prev, "idle_turns": idle}, expire=ttl)
 
     # ── 토큰 기반 자동 압축 트리거 ──────────────────────────────────
     # 비동기 fire-and-forget. 사용자 응답 레이턴시에 영향 없음.
@@ -1914,18 +1949,19 @@ async def _compact_history(key: str, ttl: int) -> None:
         2. 메시지 수가 keep_recent + min_old 미만이면 스킵.
         3. 가장 오래된 메시지가 기존 summary(name==MARKER) 면 previous_summary 추출.
         4. LLM 요약 호출 (LLMFactory.create_with_fallback). 실패 시 LIST 무변경.
-        5. 락 보유 중 LIST 재조회 → 압축 중 추가된 메시지가 있으면 keep 영역에 이어붙임.
-        6. LIST 재구성: [summary, *keep] → delete → rpush → expire.
+        5. 요약한 앞쪽 구간만 원자적으로 [summary] 로 바꾼다(redis_store.replace_prefix).
+           압축하는 사이 붙은 턴은 뒤쪽이라 그대로 남는다. 앞쪽이 그사이 트림으로 바뀌었으면
+           아무것도 바꾸지 않고 다음 턴에 다시 시도한다.
         7. `{key}:compact_announce` 키에 통지 페이로드 set.
 
     Args:
         key: history Redis 키.
         ttl: history LIST 의 TTL.
     """
-    raw = await redis_store.lrange(key)
-    if not raw:
+    raw_strs = await redis_store.lrange_raw(key)
+    if not raw_strs:
         return
-    messages = [Message(**m) for m in raw]
+    messages = [Message(**json.loads(r)) for r in raw_strs]
 
     if _estimate_tokens(messages) < COMPACT_TRIGGER_TOKENS:
         return  # idempotent — 이미 작아진 경우
@@ -1935,6 +1971,8 @@ async def _compact_history(key: str, ttl: int) -> None:
 
     old_messages = messages[:-COMPACT_KEEP_RECENT_MESSAGES]
     keep_messages = messages[-COMPACT_KEEP_RECENT_MESSAGES:]
+    # 교체할 앞쪽 구간(이전 요약 포함)의 원문 — 원자 교체 때 그대로 대조한다.
+    prefix_raw = raw_strs[: len(raw_strs) - COMPACT_KEEP_RECENT_MESSAGES]
 
     # 기존 summary 흡수
     previous_summary: Optional[str] = None
@@ -1961,29 +1999,20 @@ async def _compact_history(key: str, ttl: int) -> None:
         logger.warning("압축 LLM 응답이 비어있음 — 스킵: key=%s", key)
         return
 
-    # 락 보유 중 LIST 재조회 → 압축 진행 도중 append_turn 으로 추가된 메시지 보존.
-    snapshot_before = len(messages)
-    raw_after = await redis_store.lrange(key)
-    if len(raw_after) > snapshot_before:
-        added_msgs = [Message(**m) for m in raw_after[snapshot_before:]]
-        keep_messages = keep_messages + added_msgs
-        logger.info(
-            "압축 진행 중 %d 메시지 추가됨 — keep 영역에 흡수: key=%s",
-            len(added_msgs), key,
-        )
-
     new_summary = Message(
         role="system",
         name=COMPACT_SUMMARY_MARKER,
         content=summary_text,
     )
 
-    new_payloads = [new_summary.model_dump(exclude_none=True)]
-    new_payloads.extend(m.model_dump(exclude_none=True) for m in keep_messages)
-
-    await redis_store.delete(key)
-    await redis_store.rpush(key, *new_payloads)
-    await redis_store.expire(key, ttl)
+    # 요약한 앞쪽만 원자적으로 바꾼다. 예전에는 길이로 "그사이 붙은 턴"을 찾고 delete → rpush 했는데,
+    # append_turn 이 rpush 뒤 ltrim 하면 길이가 그대로라 새 턴을 못 보고 덮어써 잃었다.
+    swapped = await redis_store.replace_prefix(
+        key, prefix_raw, [new_summary.model_dump(exclude_none=True)], ttl,
+    )
+    if not swapped:
+        logger.info("압축 중 이력 앞쪽이 바뀜(트림 등) — 이번 압축 취소, 다음 턴에 재시도: key=%s", key)
+        return
 
     # 통지 키 set — 관측성 목적으로 보존 (외부 노출되지 않으며 COMPACT_ANNOUNCE_TTL 만료 시 정리).
     await redis_store.set(

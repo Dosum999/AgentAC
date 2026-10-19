@@ -197,6 +197,47 @@ class RedisStore:
             print(f"Redis ltrim error: {e}")
             return False
 
+    async def lrange_raw(self, key: str, start: int = 0, end: int = -1) -> list:
+        """리스트 범위를 직렬화된 문자열 그대로 돌려준다(원자 비교용)."""
+        try:
+            values = await self.redis.lrange(key, start, end)
+            return [v.decode("utf-8") if isinstance(v, (bytes, bytearray)) else v for v in values]
+        except Exception as e:
+            print(f"Redis lrange_raw error: {e}")
+            return []
+
+    # 앞쪽 n개가 기대값과 **글자 그대로** 같을 때만 그 n개를 replacement 로 바꾼다. 뒤쪽(그사이 붙은 턴)은 건드리지 않는다.
+    _REPLACE_PREFIX_LUA = """
+local n = tonumber(ARGV[1])
+local cur = redis.call('LRANGE', KEYS[1], 0, n - 1)
+if #cur ~= n then return 0 end
+for i = 1, n do
+  if cur[i] ~= ARGV[1 + i] then return 0 end
+end
+local m = tonumber(ARGV[2 + n])
+redis.call('LTRIM', KEYS[1], n, -1)
+for j = m, 1, -1 do
+  redis.call('LPUSH', KEYS[1], ARGV[2 + n + j])
+end
+redis.call('EXPIRE', KEYS[1], tonumber(ARGV[3 + n + m]))
+return 1
+"""
+
+    async def replace_prefix(self, key: str, expected: list, replacement: list, ttl: int) -> bool:
+        """앞쪽 구간을 원자적으로 교체한다. 앞쪽이 그사이 바뀌었으면(트림 등) 아무것도 안 하고 False.
+
+        Args:
+            expected: lrange_raw 로 읽은 앞쪽 구간(직렬화 문자열).
+            replacement: 그 자리에 넣을 값(자동 JSON 직렬화).
+        """
+        try:
+            args = [len(expected), *expected, len(replacement),
+                    *[json.dumps(v) for v in replacement], ttl]
+            return bool(await self.redis.eval(self._REPLACE_PREFIX_LUA, 1, key, *args))
+        except Exception as e:
+            print(f"Redis replace_prefix error: {e}")
+            return False
+
     async def lrange(self, key: str, start: int = 0, end: int = -1) -> list:
         """리스트의 범위를 조회한다.
 

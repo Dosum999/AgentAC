@@ -34,3 +34,4 @@ httpx2>=2.5.0
 # 테스트
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
+fakeredis[lua]>=2.20   # Redis Lua 스크립트(이력 원자 교체)를 실제 Lua 로 검증

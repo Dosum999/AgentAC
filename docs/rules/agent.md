@@ -378,9 +378,10 @@ flowchart TD
 - **함정**: 주입 경로가 dormant 였던 적이 있다(저장 199회 / 주입 0회). 직전 도메인 도출은 tool_ctx 를 대화 id 로 직접 읽어야 한다(`load_prev_tool_names`).
 - **함정**: 대화 id 왕복이 끊기면 이력·tool_ctx·후속 라우팅이 함께 실패한다. 프론트가 done 이벤트의 conversation_id 를 반드시 돌려줘야 한다.
 
-**규칙**: 긴 대화는 요약 머리 + 최근 원문으로 압축한다.
-- **어떻게**: `conversation.py:_compact_history(_guarded)`.
-- **알려진 결함**: 재압축 때 이전 요약 내용이 버려진다. 압축 중 append 가 새 턴을 잃을 수 있다(14절).
+**규칙**: 긴 대화는 요약 머리 + 최근 원문으로 압축한다. 교체는 요약한 앞쪽 구간만 원자적으로 한다.
+- **왜**: 길이로 "그사이 붙은 턴"을 찾고 delete → rpush 하면, append 가 ltrim 해 길이가 그대로인 경우 새 턴을 잃는다.
+- **어떻게**: `conversation.py:_compact_history(_guarded)`, `redis_store.replace_prefix`(Lua).
+- **알려진 결함**: 재압축 때 이전 요약 내용이 버려진다(14절).
 
 **규칙**: 다른 프로바이더가 만든 tool_call 을 Gemini 에 재생할 때는 평문으로 펼친다(11절).
 
@@ -449,8 +450,6 @@ flowchart TD
 ## 14. 알려진 결함과 미구현
 
 **확인된 결함(미수정)**
-- tool_ctx 가 무도구 턴에 TTL 만 갱신해서, 오래된 결과가 최신 user 뒤에 주입될 수 있다. prior_domain/sticky 가 오래된 턴을 기준으로 할 수 있다(last_route 와 엇갈림).
-- 압축 중 append 가 ltrim 으로 길이가 그대로면 새 턴을 잃는다.
 - 첨부 평문이 질문 앞에 붙은 채 이력에 영구 저장된다. 라우터·회상·메모리 추출이 첨부를 사용자 발화로 본다.
 - 스트림 단계 반복 붕괴 감지가 없다. Gemini 런타임 503 → 다른 프로바이더 폴백이 없다(503 은 빈 응답으로 끝남).
 - 재압축 요약이 이전 요약 내용을 버린다. 그러면 모델이 요약에도 원문에도 없는 사실을 지어낸다.
@@ -462,6 +461,8 @@ flowchart TD
 - 실행기 도구 이름 폴백의 권한 우회 → 게이트 재평가(5절).
 - 강제 답변 경로(max_iterations 소진·malformed)에 반복 접기·길이 상한이 없던 것 → 최종 답변 노드와 같은 `_bound_answer` 를 거친다.
 - last_route 를 답 전에 저장하고 새 대화 첫 턴에는 못 남기던 것 → 답 저장 때 확정 대화 id 로 저장(`memory/conversation.begin_turn_route/record_turn_route`).
+- 도구 없는 턴을 지나도 tool_ctx 가 최신 질문 뒤에 붙던 것 → 결과를 만든 턴(anchor) 뒤에 붙이고, 그 턴이 이력에서 빠졌으면 주입하지 않는다. 도구 없는 턴이 2번을 넘으면 버린다(`TOOL_CTX_MAX_IDLE_TURNS`).
+- 압축 중 append 가 ltrim 으로 길이가 그대로면 새 턴을 잃던 것 → 요약한 앞쪽만 Lua 로 원자 교체(`redis_store.replace_prefix`), 앞쪽이 바뀌었으면 이번 압축 취소.
 
 **실험 단계에서 검증했으나 이 레포 코드에는 없는 설계** (같은 결함들의 해법 후보)
 - **턴 락**: 같은 대화 동시 요청을 직렬화한다(enqueue → 상한 대기 후 거절, 하트비트·값 비교 해제). 압축은 원자 교체(Lua)로 한다.

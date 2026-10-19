@@ -65,6 +65,20 @@ class _FakeRedis:
         self.expires[key] = seconds
         return True
 
+    async def lrange_raw(self, key: str, start: int = 0, end: int = -1) -> list:
+        lst = self.lists.get(key, [])
+        end_idx = None if end == -1 else end + 1
+        return list(lst[start:end_idx])
+
+    async def replace_prefix(self, key: str, expected: list, replacement: list, ttl: int) -> bool:
+        lst = self.lists.get(key, [])
+        n = len(expected)
+        if lst[:n] != list(expected):
+            return False
+        self.lists[key] = [json.dumps(v) for v in replacement] + lst[n:]
+        self.expires[key] = ttl
+        return True
+
     async def lrange(self, key: str, start: int = 0, end: int = -1) -> list:
         lst = self.lists.get(key, [])
         end_idx = None if end == -1 else end + 1
@@ -175,9 +189,24 @@ class TestAppendTurnToolCtx:
             key, "안녕", "안녕하세요!", tool_calls=None, tool_results=None
         )
 
-        # 삭제되지 않고 유지 + TTL 이 history LIST 와 동일(SESSION_TTL)로 갱신됨
-        assert fake_redis.kv[f"{key}:tool_ctx"] == {"tool_calls": [{"id": "old"}]}
+        # 삭제되지 않고 유지(도구 없는 턴 수만 센다) + TTL 이 history LIST 와 동일(SESSION_TTL)로 갱신됨
+        assert fake_redis.kv[f"{key}:tool_ctx"] == {"tool_calls": [{"id": "old"}], "idle_turns": 1}
         assert fake_redis.expires[f"{key}:tool_ctx"] == conv_module.SESSION_TTL
+
+    @pytest.mark.asyncio
+    async def test_drops_tool_ctx_after_max_idle_turns(self, fake_redis, no_prefs):
+        """도구 없는 턴이 TOOL_CTX_MAX_IDLE_TURNS 를 넘으면 버린다 — 주제가 바뀐 뒤 오래된 결과가 끼던 것."""
+        key = "conversation:test-idle"
+        await conv_module.append_turn(
+            key, "보고서 보여줘", "보고서",
+            tool_calls=[{"id": "c1", "name": "get_report", "arguments": {}}],
+            tool_results=[{"tool_call_id": "c1", "name": "get_report", "content": "데이터"}],
+        )
+        for i in range(conv_module.TOOL_CTX_MAX_IDLE_TURNS):
+            await conv_module.append_turn(key, f"잡담 {i}", "네")
+            assert f"{key}:tool_ctx" in fake_redis.kv
+        await conv_module.append_turn(key, "다른 얘기", "네")
+        assert f"{key}:tool_ctx" not in fake_redis.kv
 
     @pytest.mark.asyncio
     async def test_trims_large_tool_result_content(self, fake_redis, no_prefs):
@@ -285,6 +314,39 @@ class TestLoadHistoryInjection:
         assert history[2].tool_call_id == "c1"
         assert history[3].role == "assistant"
         assert history[3].content == "월간 보고서 응답"
+
+    @pytest.mark.asyncio
+    async def test_injects_after_the_turn_that_produced_it(self, fake_redis, no_prefs):
+        """도구 없는 턴을 지난 뒤에도 결과는 그것을 만든 턴 뒤에 붙는다(마지막 user 뒤가 아니라)."""
+        key = "conversation:test-anchor"
+        await conv_module.append_turn(
+            key, "보고서 보여줘", "월간 보고서 응답",
+            tool_calls=[{"id": "c1", "name": "get_report", "arguments": {}}],
+            tool_results=[{"tool_call_id": "c1", "name": "get_report", "content": "데이터"}],
+        )
+        await conv_module.append_turn(key, "어느 달이요?", "몇 월 보고서를 원하세요?")
+
+        history = await conv_module.load_history(key)
+
+        roles = [(m.role, m.content) for m in history]
+        assert roles[0] == ("user", "보고서 보여줘")
+        assert history[1].tool_calls and history[2].role == "tool"
+        assert roles[3] == ("assistant", "월간 보고서 응답")
+        assert roles[4] == ("user", "어느 달이요?")
+        assert all(m.role != "tool" for m in history[4:])
+
+    @pytest.mark.asyncio
+    async def test_no_injection_when_producing_turn_left_history(self, fake_redis, no_prefs):
+        """결과를 만든 턴이 이력에서 빠졌으면(압축·트림) 붙일 자리가 없으므로 주입하지 않는다."""
+        key = "conversation:test-gone"
+        fake_redis.kv[f"{key}:tool_ctx"] = {
+            "tool_calls": [{"id": "c1", "name": "get_report", "arguments": {}}],
+            "tool_results": [{"tool_call_id": "c1", "name": "get_report", "content": "데이터"}],
+            "anchor": conv_module._turn_anchor("이미 사라진 질문"),
+        }
+        await conv_module.append_turn(key, "안녕", "안녕하세요!")
+        history = await conv_module.load_history(key)
+        assert all(m.role != "tool" for m in history)
 
     @pytest.mark.asyncio
     async def test_no_injection_when_tool_ctx_absent(self, fake_redis, no_prefs):
@@ -1178,3 +1240,51 @@ class TestHistoryFallbackToPostgres:
 
 async def _async_value(value):
     return value
+
+
+class TestCompactRace:
+    """압축하는 사이 붙은 턴을 잃지 않는다 — append_turn 이 rpush 뒤 ltrim 해 길이가 그대로인 경우 포함."""
+
+    @pytest.mark.asyncio
+    async def test_turn_appended_during_compaction_survives(self, fake_redis, fake_llm):
+        key = "conversation:race-1"
+        msgs = _seed_messages(20, content_len=600)
+        fake_redis.lists[key] = [json.dumps(m) for m in msgs]
+
+        orig_invoke = fake_llm.invoke
+
+        async def invoke_and_append(*a, **k):
+            # 요약 LLM 이 도는 사이 새 턴이 붙는다(길이 상한 없이 — 뒤쪽에만 붙음).
+            await fake_redis.rpush(key, {"role": "user", "content": "새 질문"},
+                                   {"role": "assistant", "content": "새 답"})
+            return await orig_invoke(*a, **k)
+
+        fake_llm.invoke = invoke_and_append
+        await conv_module._compact_history(key, ttl=3600)
+
+        stored = [json.loads(v) for v in fake_redis.lists[key]]
+        assert stored[0]["name"] == conv_module.COMPACT_SUMMARY_MARKER
+        assert [m["content"] for m in stored[-2:]] == ["새 질문", "새 답"]
+
+    @pytest.mark.asyncio
+    async def test_compaction_aborts_when_head_was_trimmed(self, fake_redis, fake_llm):
+        """그사이 트림으로 앞쪽이 바뀌면(길이는 그대로) 덮어쓰지 않고 이번 압축을 취소한다."""
+        key = "conversation:race-2"
+        msgs = _seed_messages(20, content_len=600)
+        fake_redis.lists[key] = [json.dumps(m) for m in msgs]
+
+        orig_invoke = fake_llm.invoke
+
+        async def invoke_append_trim(*a, **k):
+            await fake_redis.rpush(key, {"role": "user", "content": "새 질문"},
+                                   {"role": "assistant", "content": "새 답"})
+            await fake_redis.ltrim(key, -20, -1)   # 길이 20 유지 — 예전 코드가 새 턴을 못 보던 모양
+            return await orig_invoke(*a, **k)
+
+        fake_llm.invoke = invoke_append_trim
+        await conv_module._compact_history(key, ttl=3600)
+
+        stored = [json.loads(v) for v in fake_redis.lists[key]]
+        assert len(stored) == 20
+        assert all(m.get("name") != conv_module.COMPACT_SUMMARY_MARKER for m in stored)
+        assert [m["content"] for m in stored[-2:]] == ["새 질문", "새 답"]
