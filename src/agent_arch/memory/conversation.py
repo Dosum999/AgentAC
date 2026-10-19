@@ -1875,50 +1875,6 @@ def _estimate_tokens(messages: List[Message]) -> int:
     return total
 
 
-def _build_summary_messages(
-    old_messages: List[Message],
-    previous_summary: Optional[str],
-) -> List[Message]:
-    """LLM 요약 호출을 위한 입력 메시지를 구성한다.
-
-    [system: CONVERSATION_COMPACT_PROMPT, user: <dump>] 형식.
-    dump 는 previous_summary 헤더 + 각 메시지를 `[role] content` 라인으로 직렬화.
-    tool_calls 가 있으면 JSON 한 줄 추가.
-
-    Args:
-        old_messages: 요약 대상 메시지 (시간순).
-        previous_summary: 직전 압축에서 생성된 요약 본문. 없으면 None.
-
-    Returns:
-        LLM invoke 에 그대로 전달 가능한 Message 리스트 (2개).
-    """
-    # 순환 import 회피: 함수 내부에서 import.
-    from agent_arch.agents.prompts.system import CONVERSATION_COMPACT_PROMPT
-
-    lines: List[str] = []
-    if previous_summary:
-        lines.append("[이전 요약]")
-        lines.append(previous_summary)
-        lines.append("")
-        lines.append("[추가로 요약할 대화]")
-    else:
-        lines.append("[요약할 대화]")
-    for m in old_messages:
-        role = m.role
-        content = m.content or ""
-        lines.append(f"[{role}] {content}")
-        if m.tool_calls:
-            try:
-                lines.append(f"  tool_calls={json.dumps(m.tool_calls, ensure_ascii=False)}")
-            except Exception:
-                pass
-    dump = "\n".join(lines)
-    return [
-        Message(role="system", content=CONVERSATION_COMPACT_PROMPT),
-        Message(role="user", content=dump),
-    ]
-
-
 async def _compact_history_guarded(key: str, ttl: int) -> None:
     """압축 락을 획득한 뒤 _compact_history 를 실행한다.
 
@@ -1948,7 +1904,8 @@ async def _compact_history(key: str, ttl: int) -> None:
         1. LIST 스냅샷 + 토큰 추정. trigger 미만이면 즉시 return (idempotent).
         2. 메시지 수가 keep_recent + min_old 미만이면 스킵.
         3. 가장 오래된 메시지가 기존 summary(name==MARKER) 면 previous_summary 추출.
-        4. LLM 요약 호출 (LLMFactory.create_with_fallback). 실패 시 LIST 무변경.
+        4. LLM 요약(memory/compact_summary.summarize: 섹션 고정·질문 원문은 코드가 붙임·코드 점검).
+           호출 실패나 점검 2회 실패면 LIST 무변경.
         5. 요약한 앞쪽 구간만 원자적으로 [summary] 로 바꾼다(redis_store.replace_prefix).
            압축하는 사이 붙은 턴은 뒤쪽이라 그대로 남는다. 앞쪽이 그사이 트림으로 바뀌었으면
            아무것도 바꾸지 않고 다음 턴에 다시 시도한다.
@@ -1983,20 +1940,19 @@ async def _compact_history(key: str, ttl: int) -> None:
             # 기존 summary 만 있고 추가 압축 대상 없음 → 스킵
             return
 
-    summary_input = _build_summary_messages(old_messages, previous_summary)
-
     # LLM 호출 — 순환 import 회피 위해 함수 내부 import.
     from agent_arch.llm.factory import LLMFactory
+    from agent_arch.memory.compact_summary import summarize
     try:
         llm = LLMFactory.create_with_fallback()
-        response = await llm.invoke(summary_input, tool_mode="NONE")
-        summary_text = (response.content or "").strip()
+        summary_text = await summarize(llm, old_messages, previous_summary)
     except Exception:
         logger.exception("압축 LLM 호출 실패: key=%s", key)
         return
 
     if not summary_text:
-        logger.warning("압축 LLM 응답이 비어있음 — 스킵: key=%s", key)
+        # 빈 응답이거나 점검(섹션·고유값·축소율)을 두 번 통과하지 못했다 — 원문 유지.
+        logger.warning("압축 요약이 점검을 통과하지 못함 — 이번 압축 취소: key=%s", key)
         return
 
     new_summary = Message(

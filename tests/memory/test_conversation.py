@@ -514,7 +514,11 @@ class _FakeLLM:
 
     def __init__(
         self,
-        summary_text: str = "이전 대화 요약: 사용자가 질문하고 응답을 받았다.",
+        summary_text: str = (
+            "## 목적과 진행 상황\n- 사용자가 질문하고 응답을 받았다.\n"
+            "## 확정된 사실과 결정\n- 없음\n## 사용한 도구와 결과\n- 없음\n"
+            "## 고유값(이름·날짜·코드·수치)\n- 없음\n## 남은 일\n- 없음"
+        ),
         raise_exc: Optional[Exception] = None,
     ) -> None:
         self.summary_text = summary_text
