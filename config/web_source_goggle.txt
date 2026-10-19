@@ -1,0 +1,68 @@
+! 웹 검색 출처 정책(Brave Goggles) — 모든 brave_* 호출에 강제값 goggles 로 실린다(services/web/source_policy).
+! '!' 로 시작하는 줄은 설명이라 보내지 않는다. 문법: https://github.com/brave/goggles-quickstart
+!
+! 근거(2026-09-23 벤치 30문항, ChatGPT 대비): 출처 품질 2.87/5 — 한국어 '시장 동향' 질의 상위 10건이 거의 전부 시장규모
+! 리포트 판매 사이트였고(CAGR·보고서 광고), 심판 치명 지적에 "리포트팜·브로커 블로그를 핵심 근거로 씀"이 반복됐다.
+! 판매용 리포트 요약은 원자료가 아니므로 버린다. 블로그 플랫폼은 버리지 않고 낮춘다(업체 기술 설명 등 쓸모 있는 글도 있다).
+! 공공·주요 언론은 올린다. 항목 추가·삭제는 이 파일만 고치면 된다(재시작 필요).
+
+! ── 시장규모 리포트 판매(원자료 아님) ──
+! imarcgroup·openpr 은 넣지 않는다: 원자재 단가(EPDM·카본블랙 등)는 공개 출처가 사실상 이들의 가격지수 페이지·보도자료뿐이라
+! 버리면 단가 질문의 근거가 통째로 사라진다(sg-server 실사용 2026-09-23, 고무 소재 회사의 단가 질문).
+$discard,site=researchnester.com
+$discard,site=coherentmarketinsights.com
+$discard,site=giikorea.co.kr
+$discard,site=giikorea.tistory.com
+$discard,site=gii.co.jp
+$discard,site=marketresearchfuture.com
+$discard,site=mordorintelligence.kr
+$discard,site=mordorintelligence.com
+$discard,site=fortunebusinessinsights.com
+$discard,site=industryresearch.biz
+$discard,site=marketsandmarkets.com
+$discard,site=grandviewresearch.com
+$discard,site=precedenceresearch.com
+$discard,site=alliedmarketresearch.com
+$discard,site=verifiedmarketresearch.com
+$discard,site=businessresearchinsights.com
+$discard,site=globalgrowthinsights.com
+$discard,site=reportprime.com
+$discard,site=marketresearch.com
+$discard,site=6wresearch.com
+$discard,site=expertmarketresearch.com
+$discard,site=towardspackaging.com
+$discard,site=snsinsider.com
+
+! ── 블로그·UGC 플랫폼(낮춤) ──
+$downrank=3,site=tistory.com
+$downrank=3,site=blog.naver.com
+$downrank=3,site=brunch.co.kr
+$downrank=3,site=medium.com
+
+! ── 공공·기관 ──
+$boost=3,site=go.kr
+$boost=2,site=korea.kr
+$boost=2,site=or.kr
+$boost=2,site=re.kr
+$boost=2,site=kita.net
+$boost=2,site=kotra.or.kr
+$boost=2,site=europa.eu
+$boost=2,site=gov
+
+! ── 주요 언론·통신 ──
+$boost=2,site=yna.co.kr
+$boost=2,site=news1.kr
+$boost=2,site=newsis.com
+$boost=2,site=hankyung.com
+$boost=2,site=mk.co.kr
+$boost=2,site=sedaily.com
+$boost=2,site=edaily.co.kr
+$boost=2,site=mt.co.kr
+$boost=2,site=chosun.com
+$boost=2,site=joongang.co.kr
+$boost=2,site=donga.com
+$boost=2,site=etnews.com
+$boost=2,site=snmnews.com
+$boost=2,site=reuters.com
+$boost=2,site=apnews.com
+$boost=2,site=bloomberg.com
