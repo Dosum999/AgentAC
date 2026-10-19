@@ -104,6 +104,11 @@ async def run_upper_layers(
     late = await _take_rerun(user_sub)
     if late:
         schedule_upper_layers(user_sub, delay=0, **late)
+    elif fresh_persona or want.get("fresh_persona"):
+        # 삭제 뒤 재작성이 끝났다 — 회상이 다시 페르소나·장면을 싣는다(recall.mark_upper_stale 짝).
+        from agent_arch.services.memory_v2.recall import clear_upper_stale, invalidate_stable_block
+        await clear_upper_stale(user_sub)
+        await invalidate_stable_block(user_sub)
     return out
 
 

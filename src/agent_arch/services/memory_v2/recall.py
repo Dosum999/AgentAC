@@ -253,10 +253,11 @@ def format_system_block(persona: Optional[str], scenes: list[dict], strict: Opti
     """
     lines = [TOOLS_GUIDE]
     if strict:
-        lines.append("● 전역 지시(사용자가 못 박은 규칙 — 이번 메시지에서 다르게 요청하면 그 요청 우선):")
+        lines.append("● 전역 지시(사용자가 못 박은 규칙 — 모든 답변에 적용한다. 이번 메시지에서 다르게 요청하면 그 요청 우선):")
         lines.extend(f"  - {a.get('content')}" for a in strict)
     if persona and persona.strip():
-        lines.append("● 사용자 페르소나(대화에서 추론된 요약 — 사실로 단정 말 것, 이번 요청과 어긋나면 이번 요청 우선):")
+        lines.append("● 사용자 페르소나(대화에서 추론된 요약 — 사실로 단정 말 것, 이번 요청과 어긋나면 이번 요청 우선, "
+                     "이번 질문과 관련 있을 때만 쓰고 관계없는 답에 끼워 넣지 말 것):")
         lines.extend(f"  {ln}" for ln in persona.splitlines() if ln.strip())
     if scenes:
         lines.append(_SCENES_HEADER)
@@ -337,10 +338,13 @@ def rule_reminder(recall: Optional["RecallResult"]) -> str:
     rules = recalled_user_rules(recall)
     if not rules:
         return ""
+    # 전역 지시는 '모든 답변에 적용'이라고 밝힌다 — 머리말이 "이번 작업에 해당하면 적용"이라, 서식·서명 규칙을 모델이
+    # 해당 없음으로 보고 빠뜨렸다(로컬 2026-09-29: 규칙이 실린 턴에서도 서명 누락 1회).
+    always = {str(a.get("content") or "").strip() for a in (getattr(recall, "strict", None) or [])}
     lines = [_RULE_REMINDER_HEADER]
     used = len(_RULE_REMINDER_HEADER)
     for r in rules:
-        ln = f"- {r}"
+        ln = f"- (모든 답변에 적용) {r}" if r in always else f"- {r}"
         if used + len(ln) > RULE_REMINDER_MAX_CHARS:
             break
         lines.append(ln)
@@ -382,17 +386,54 @@ async def _get_stable_cache(
 
 async def _set_stable_cache(
     user_sub: str, company_scope: Optional[str], block: str, strict_ids: list[str],
-    place_bound: Optional[str] = None,
+    place_bound: Optional[str] = None, strict: Optional[list[dict]] = None,
 ) -> None:
     try:
         await redis_store.set(
             _stable_key(user_sub),
             {"company": company_scope or None, "block": block, "strict_ids": strict_ids,
-             "place_bound": place_bound},
+             "place_bound": place_bound,
+             # 전역 지시 본문도 싣는다 — 적중 때 strict 가 비면 턴 블록·도구 결과 뒤 규칙 리마인더에서 전역 규칙이 빠진다.
+             "strict": [{"id": a.get("id"), "atom_type": a.get("atom_type"), "content": a.get("content")}
+                        for a in (strict or [])]},
             expire=STABLE_CACHE_TTL_SECONDS,
         )
     except Exception as e:
         logger.debug("memory_v2 안정 블록 캐시 저장 실패(무시): %s", e)
+
+
+UPPER_STALE_TTL_SECONDS = 300
+
+
+def _upper_stale_key(user_sub: str) -> str:
+    return f"memory2:upper:stale:{user_sub}"
+
+
+async def mark_upper_stale(user_sub: str) -> None:
+    """기억을 지운 직후 — 상위층(페르소나·장면) 재작성이 끝날 때까지 회상에서 그 둘을 뺀다.
+
+    재작성은 예약(비동기, LLM 20~30초)이라 그 사이 회상이 지운 규칙이 남은 옛 페르소나·장면을 그대로 읽었다(로컬 2026-09-29:
+    "'[요약]' 규칙 지워줘" 8초 뒤 답에 [요약]이 또 붙음, 회상 지시=0). 삭제는 즉시 효력이어야 한다. 재작성이 끝나면
+    ``clear_upper_stale`` 이 풀고, 실패해도 TTL 이 지나면 풀린다.
+    """
+    try:
+        await redis_store.set(_upper_stale_key(user_sub), "1", expire=UPPER_STALE_TTL_SECONDS)
+    except Exception as e:
+        logger.debug("memory_v2 상위층 stale 표시 실패(무시): %s", e)
+
+
+async def clear_upper_stale(user_sub: str) -> None:
+    try:
+        await redis_store.delete(_upper_stale_key(user_sub))
+    except Exception as e:
+        logger.debug("memory_v2 상위층 stale 해제 실패(무시): %s", e)
+
+
+async def _upper_is_stale(user_sub: str) -> bool:
+    try:
+        return bool(await redis_store.get(_upper_stale_key(user_sub)))
+    except Exception:
+        return False
 
 
 async def invalidate_stable_block(user_sub: str) -> None:
@@ -449,7 +490,11 @@ async def _recall(
         )
         strict_ids = set(cached.get("strict_ids") or [])
         system_block = cached["block"]
-        strict, persona_text, scenes = [], None, []
+        # 적중 때도 전역 지시를 채운다. 예전엔 빈 목록이라 로그 '지시=0'·턴 블록·규칙 리마인더에서 전역 규칙이 빠졌다 —
+        # 로컬 실측(2026-09-29): 같은 사용자의 앞 턴(미스)은 지시=1 로 서명 규칙이 적용되고, 바로 뒤 웹 턴(적중)은 지시=0 으로 빠졌다.
+        # 캐시가 본문을 안 가진 예전 값이면 빈 목록 그대로(시스템 블록에는 들어 있다).
+        strict = [a for a in (cached.get("strict") or []) if isinstance(a, dict) and a.get("content")]
+        persona_text, scenes = None, []
     else:
         # 안정 블록을 이루는 세 소스(지시·페르소나·장면)만 캐시 판단에 넣는다. 별칭·관련 아톰은
         # 캐시 대상이 아니라 매 턴 다시 조회하므로, 그쪽 실패로 캐시까지 막을 이유가 없다.
@@ -461,6 +506,10 @@ async def _recall(
             _safe(repo.list_scenes(user_sub, limit=NAV_SCENES), [], name="scenes", failures=stable_failures),
             _safe(hybrid_search(user_sub, query, limit=MAX_TURN_ATOMS, exclude_types=("alias",), place=here), [], name="related") if turn_recall else _noop([]),
         )
+        # 기억을 지운 직후면 재작성 전의 페르소나·장면을 싣지 않는다(지운 내용이 남아 있다) — 캐시도 하지 않는다.
+        if await _upper_is_stale(user_sub):
+            persona, scenes = None, []
+            stable_failures.append("upper_stale")
         # 장소에 매인 전역 지시는 그 장소에서만 상시 블록에 넣는다. 블록을 만들기 전에 거른다.
         place_bound = here if any(place_mod.atom_places(a) for a in strict) else None
         strict = [a for a in strict if place_mod.eligible(a, here)]
@@ -477,7 +526,7 @@ async def _recall(
             )
         else:
             await _set_stable_cache(user_sub, company_scope, system_block, sorted(strict_ids),
-                                    place_bound=place_bound)
+                                    place_bound=place_bound, strict=strict)
     aliases = match_aliases(query, alias_pool)
     atoms = [a for a in related if a["id"] not in strict_ids][:MAX_TURN_ATOMS]
     logger.info(

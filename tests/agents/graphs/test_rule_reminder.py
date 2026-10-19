@@ -14,7 +14,7 @@ from agent_arch.agents.tools.base import ToolResult
 from agent_arch.llm.base import Message, StreamEvent, ToolCall
 from agent_arch.services.memory_v2.recall import RecallResult
 
-RULE = "점심 상신 시 결재자는 박준흥, 결제수단은 법인카드(2857)로 한다"
+RULE = "점심 상신 시 결재자는 김부장, 결제수단은 법인카드(2857)로 한다"
 
 
 def _llm(seen):
@@ -64,7 +64,7 @@ async def test_reminder_after_last_tool_result_only_and_not_persisted(caplog):
     caplog.set_level("INFO", logger="agent_arch.agents.graphs.react_graph")
     res, tool_msgs = await _run(RecallResult(atoms=[
         {"atom_type": "instruction", "content": RULE},
-        {"atom_type": "episodic", "content": "9/22 박준흥에게 상신했다"},
+        {"atom_type": "episodic", "content": "9/22 김부장에게 상신했다"},
     ]))
     assert len(tool_msgs) == 2
     assert "[사용자가 정한 규칙" not in tool_msgs[0]

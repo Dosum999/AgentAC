@@ -393,7 +393,8 @@ _DOMAIN_ADDENDA = {
         "단정하지 마라 — 검색 인덱스는 페이지 갱신을 늦게 반영해, 원 페이지에는 이미 최신 값이 있을 수 있다.\n"
         "- 공식 기관·기업 공식 자료·주요 언론을 우선 근거로 쓴다. 시장규모 리포트 판매 사이트·광고성 블로그·요청 기간 밖의 옛 글은 "
         "근거로 쓰지 마라. 요청 조건(기간·유형·대상)에 맞지 않는 결과는 버리고 그렇다고 말하라 — 무관한 내용으로 답을 채우지 마라.\n"
-        "- **웹 답변 형식(위 '답변 구조'·'인사이트 도출 의무'·'인사이트·제안 섹션 금지 패턴'보다 우선한다)**: 첫 문장에 질문에 대한 "
+        "- **웹 답변 형식(위 '답변 구조'·'인사이트 도출 의무'·'인사이트·제안 섹션 금지 패턴'보다 우선한다. 단 사용자가 정한 규칙"
+        "(서식·표 사용·호칭·서명 등)이 있으면 그 규칙이 이 형식보다 먼저다)**: 첫 문장에 질문에 대한 "
         "직접 답 → 이번 결과로 확인된 핵심 근거(수치·날짜·기준 시점·출처)를 항목 몇 개나 표 하나로 → 확인하지 못한 부분이 있으면 "
         "한 줄. 결과로 뒷받침되지 않는 인사이트·전망·원인 추정·실무 제안 섹션은 쓰지 마라. 필요한 만큼만 짧게 쓴다.\n"
         "- 대상이 여러 뜻으로 갈리고(예: 브라켓 = 치과/산업/TV) 앞선 대화로도 정해지지 않으면 한 줄로 되물어라. "
@@ -952,7 +953,15 @@ async def _run_worker(
                                              target_language=target_language,
                                              turn_input_guide=_turn_input_guide_allowed(single_domain, read_q, action_q))
 
-    return domain, _combine_worker(read_result, write_result)
+    merged = None
+    r_text = (read_result.content or "").strip() if read_result else ""
+    w_text = (write_result.content or "").strip() if write_result else ""
+    if (r_text and w_text and not (write_result and getattr(write_result, "pending_queue", None))
+            and not _is_restatement(r_text, w_text)):
+        merged = await _reconcile_read_write(make_worker_llm_fn, domain, messages, r_text, w_text)
+        if merged:
+            logger.info("[supervisor] domain=%s 조회·실행 결과를 한 답으로 정리(%d+%d → %d자)", domain, len(r_text), len(w_text), len(merged))
+    return domain, _combine_worker(read_result, write_result, merged)
 
 
 #: 두 답변을 "같은 말"로 볼 유사도. 재서술은 문장 다듬기 정도만 달라 0.9 를 넘기고,
@@ -988,7 +997,40 @@ def _is_restatement(read_text: str, write_text: str) -> bool:
     return difflib.SequenceMatcher(None, a, b).ratio() >= _RESTATEMENT_RATIO
 
 
-def _combine_worker(read_result: Optional[LoopResult], write_result: Optional[LoopResult]) -> Optional[LoopResult]:
+_RECONCILE_PROMPT = (
+    "너는 한 담당자의 두 결과를 사용자에게 보낼 답 하나로 합치는 편집자다. [조회 결과]는 실행 **전** 상태이고, "
+    "[실행 결과]가 최신 상태다. 조회 결과 중 실행으로 달라진 내용(예: '저장되어 있습니다', '지우려면 말씀해 주세요')은 "
+    "버리고 실행 결과를 따른다. 사용자가 조회도 따로 요청했으면(예: '목록 보여주고 하나 지워줘') 그 조회 내용은 남긴다. "
+    "없는 내용을 지어내지 말고, 인사말 없이 바로 답한다. 답 본문만 출력한다."
+)
+
+
+async def _reconcile_read_write(make_worker_llm_fn, domain: str, messages: list, read_text: str,
+                                write_text: str) -> Optional[str]:
+    """같은 도메인의 조회·실행 결과를 한 답으로 — 이어 붙이면 실행 전 상태가 실행 결과와 부딪친다.
+
+    실측(로컬 2026-09-29): "'[요약]' 붙이는 규칙 지워줘" 답이 "해당 지시가 저장되어 있습니다… 지우려면 '그 기억 지워줘'라고
+    말씀해 주세요"(조회) 뒤에 "삭제 완료했습니다"(실행)로 이어졌다. 멀티 도메인 종합과 같은 원칙(최종 답은 편집자 하나가 쓴다).
+    실패하면 None — 호출자가 종전처럼 이어 붙인다.
+    """
+    user = next((str(getattr(m, "content", "") or "") for m in reversed(messages or []) if getattr(m, "role", None) == "user"), "")
+    try:
+        llm = _make_worker(make_worker_llm_fn, domain)
+        await llm.bind_tools([])
+        from agent_arch.llm.base import Message
+        resp = await llm.invoke([
+            Message(role="system", content=_RECONCILE_PROMPT),
+            Message(role="user", content=f"[사용자 요청]\n{user[:1500]}\n\n[조회 결과]\n{read_text}\n\n[실행 결과]\n{write_text}"),
+        ], tool_mode="NONE")
+        text = (getattr(resp, "content", "") or "").strip()
+        return text or None
+    except Exception:
+        logger.warning("[supervisor] 조회·실행 결과 정리 실패 → 이어 붙이기", exc_info=True)
+        return None
+
+
+def _combine_worker(read_result: Optional[LoopResult], write_result: Optional[LoopResult],
+                    merged_text: Optional[str] = None) -> Optional[LoopResult]:
     """read/write 서브런 결과를 하나의 LoopResult 로 합침. 둘 다 없으면 None(워커 제외).
 
     write 서브런 텍스트는 **초안(pending_queue)이 있을 때만** 버린다(카드와 중복 서술 방지).
@@ -1023,6 +1065,8 @@ def _combine_worker(read_result: Optional[LoopResult], write_result: Optional[Lo
         logger.info("[supervisor] write 재서술 감지 → %s 만 유지(read=%d자 write=%d자)",
                     kept, len(content), len(write_text))
         content = content if kept == "read" else write_text
+    elif write_text and merged_text:
+        content = merged_text            # 조회(실행 전)·실행 결과를 한 답으로 정리한 것(_reconcile_read_write)
     elif write_text:
         # 무초안 write(되물음·실패 안내): 재서술이 아니면 정보가 있는 것이므로 보존한다.
         # 버리면 사용자가 빈 응답을 받고 프론트가 무한 로딩된다(실측: "휴가 신청하고 싶어").
@@ -1084,6 +1128,17 @@ def _memory_stable_block() -> str:
         return ""
 
 
+def _memory_always_rules() -> list:
+    """이 턴에 회상된 전역 지시(priority -1) 본문 — 종합기 입력 끝에 따로 싣는다."""
+    try:
+        from agent_arch.agents.context import get_memory_recall
+        recall = get_memory_recall()
+        return [str(a.get("content")).strip() for a in (getattr(recall, "strict", None) or [])
+                if isinstance(a, dict) and str(a.get("content") or "").strip()]
+    except Exception:
+        return []
+
+
 def _synth_messages(user_input: str, ok_results: List[Tuple[str, LoopResult]],
                     language: str = DEFAULT_LANGUAGE) -> list:
     """합성기 메시지. 합성 결과가 최종 답변이므로 언어도 여기서 목표 언어로 못 박는다."""
@@ -1111,6 +1166,10 @@ def _synth_messages(user_input: str, ok_results: List[Tuple[str, LoopResult]],
     if stable:
         system = f"{system}\n\n{stable}"
     user = f"사용자 요청: {user_input}\n\n" + "\n\n".join(parts)
+    always = _memory_always_rules()
+    if always:   # 단일 워커 턴과 같은 자리(맨 끝) — 안정 블록 속 전역 지시만으로는 절반쯤 놓쳤다(로컬 2026-09-29)
+        user += ("\n\n[항상 지킬 사용자 규칙 — 모든 답변에 적용. 이번 메시지에서 다르게 요청하면 그 요청 우선]\n"
+                 + "\n".join(f"- {r}" for r in always))
     return [Message(role="system", content=system), Message(role="user", content=user)]
 
 

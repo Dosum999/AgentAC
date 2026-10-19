@@ -189,3 +189,34 @@ async def test_skip_stays_skip_without_new_id_or_for_other_kinds(fake):
                    payload={"aliases": ["watchdog"], "canonical_name": "watchdog", "canonical_kind": "mattermost_channel"})
     stats = await apply_decisions("u1", [d3], [DedupDecision(index=0, action="skip", target_ids=[T2])], generation_id="g", scene_name=None)
     assert stats.skipped == 1 and fake.inserted == []            # 신규에 id 가 없으면 원래대로 skip
+
+
+T3 = "aaaaaaaa-0000-0000-0000-000000000003"
+
+
+@pytest.mark.asyncio
+async def test_skip_promoted_to_global_when_same_rule_is_pinned_always(fake):
+    """같은 규칙을 '항상'(전역)으로 다시 저장 — 판정기가 문장만 보고 skip 해도 등급을 전역(-1)으로 올린다(로컬 2026-09-29)."""
+    fake.atoms[T3] = {"id": T3, "atom_type": "instruction", "content": "답변에 표를 쓰지 않는다", "priority": 90,
+                      "version": 1, "payload": {}}
+    d = AtomDraft(atom_type="instruction", content="표 쓰지 말 것", priority=-1)
+    stats = await apply_decisions("u1", [d], [DedupDecision(index=0, action="skip", target_ids=[T3])], generation_id="g", scene_name=None)
+    new = fake.inserted[-1]
+    assert stats.updated == 1 and stats.skipped == 0 and new["priority"] == -1
+    assert new["content"] == "답변에 표를 쓰지 않는다" and new["atom_type"] == "instruction"   # 문장은 기존 것
+    fake.atoms[T3]["priority"] = -1                                                              # 이미 전역이면 그대로 skip
+    stats = await apply_decisions("u1", [d], [DedupDecision(index=0, action="skip", target_ids=[T3])], generation_id="g", scene_name=None)
+    assert stats.skipped == 1
+
+
+def test_judge_cannot_demote_new_global_rule():
+    d = AtomDraft(atom_type="instruction", content="답변 끝에 서명을 붙인다", priority=-1)
+    assert resolve_priority(d, DedupDecision(index=0, action="store", priority=80), [], "store") == -1
+
+
+def test_global_instruction_stays_instruction_when_judge_merges_into_note():
+    """지운 규칙을 다시 전역으로 저장 — 판정기가 '규칙을 삭제했다' 기록(persona)에 합쳐도 지시로 남는다."""
+    d = AtomDraft(atom_type="instruction", content="답변 끝에 서명을 붙인다", priority=-1)
+    note = [{"id": T1, "atom_type": "persona", "content": "사용자는 서명 규칙을 삭제했다", "priority": 60}]
+    dec = DedupDecision(index=0, action="update", target_ids=[T1], atom_type="persona")
+    assert resolve_atom_type(d, dec, note, "update") == "instruction" and resolve_priority(d, dec, note, "update") == -1

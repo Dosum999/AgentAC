@@ -178,3 +178,16 @@ async def test_forget_scene_by_name(monkeypatch):
     assert out["title"] == "경비 청구" and deleted == ["업무-경비-청구"]
     assert spy and spy[0]["fresh_persona"] is True                  # 페르소나는 장면 본문을 읽는다
     assert await explicit.forget_scene("u1", "없는-장면") is None
+
+
+@pytest.mark.asyncio
+async def test_scope_decides_global_not_markers(env):
+    """모델이 '항상'을 빼고 다듬어 넘겨도 scope=always 면 전역, '항상'이 있어도 작업 조건(when_relevant)이면 일반(로컬 2026-09-29)."""
+    await explicit.save_explicit_atom("u1", "모든 답변의 마지막 줄에 '— 에이전트 드림'을 붙인다", scope="always")
+    assert env["judge"][-1][0].priority == -1
+    await explicit.save_explicit_atom("u1", "점심 상신은 항상 결재자를 김부장으로 한다", scope="when_relevant")
+    assert env["judge"][-1][0].priority == 80
+    await explicit.save_explicit_atom("u1", "앞으로 항상 존댓말로 답한다")                   # scope 없으면 종전 표지 판정
+    assert env["judge"][-1][0].priority == -1
+    await explicit.save_explicit_atom("u1", "녹차를 선호한다", atom_type="persona", scope="always")
+    assert env["judge"][-1][0].priority == 80                                                  # 전역 등급은 지시만

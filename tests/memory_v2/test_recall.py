@@ -64,8 +64,8 @@ def test_turn_block_sections_and_budget():
 
 def test_turn_block_separates_user_rules_from_records():
     """사용자가 정한 규칙은 '참고용 과거 기록'과 다른 갈래로, 먼저 싣는다(예산이 모자라면 기록이 잘린다)."""
-    atoms = [_atom(3, "episodic", "9월 22일에 박준흥 결재자로 상신했다"),
-             _atom(4, "instruction", "점심 상신 시 결재자는 박준흥, 결제수단은 법인카드(2857)로 한다")]
+    atoms = [_atom(3, "episodic", "9월 22일에 김부장 결재자로 상신했다"),
+             _atom(4, "instruction", "점심 상신 시 결재자는 김부장, 결제수단은 법인카드(2857)로 한다")]
     block = R.format_turn_block([], [], atoms)
     rules_at = block.index("● 사용자가 정한 규칙")
     records_at = block.index("● 관련 기억(과거 기록")
@@ -318,6 +318,31 @@ async def test_stable_block_cached_per_user_and_invalidated(cache_env):
     # 회사 스코프가 다르면 캐시를 쓰지 않는다
     await R.recall_for_turn("u1", "q4", company_scope="other")
     assert calls["strict"] == 3
+
+
+@pytest.mark.asyncio
+async def test_cache_hit_keeps_global_rules_for_turn_block_and_reminder(cache_env):
+    """로컬(2026-09-29): 캐시 미스 턴은 지시=1 로 서명 규칙이 적용되고, 바로 뒤 적중 턴은 strict 가 비어 규칙 리마인더에서 빠졌다."""
+    calls, _ = cache_env
+    await R.recall_for_turn("u1", "q1", company_scope="c")
+    r2 = await R.recall_for_turn("u1", "q2", company_scope="c")
+    assert calls["strict"] == 1                                                        # 적중(재조회 없음)
+    assert [a["content"] for a in r2.strict] == ["표를 쓰지 않는다"]
+    assert "(모든 답변에 적용) 표를 쓰지 않는다" in R.rule_reminder(r2)                 # 전역 지시는 항상 적용이라고 밝힌다
+    assert "표를 쓰지 않는다" in R.rule_reminder(r2) and "표를 쓰지 않는다" in r2.system_block   # 턴 블록엔 원래 안 싣는다(시스템 블록 몫)
+
+
+@pytest.mark.asyncio
+async def test_upper_stale_omits_persona_and_scenes_until_rebuilt(cache_env):
+    """로컬(2026-09-29): '[요약]' 규칙을 지운 8초 뒤 답에 [요약]이 또 붙었다 — 재작성 전 옛 페르소나를 읽었다."""
+    calls, redis = cache_env
+    await R.mark_upper_stale("u1")
+    r1 = await R.recall_for_turn("u1", "q1", company_scope="c")
+    assert "## 사용자" not in r1.system_block and "● 전역 지시" in r1.system_block          # 페르소나는 빼고 전역 지시는 싣는다
+    assert R._stable_key("u1") not in redis.store                                          # 빠진 블록은 캐시하지 않는다
+    await R.clear_upper_stale("u1")
+    r2 = await R.recall_for_turn("u1", "q2", company_scope="c")
+    assert "## 사용자" in r2.system_block
 
 
 @pytest.mark.asyncio

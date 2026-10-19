@@ -1558,6 +1558,39 @@ async def test_one_worker_exception_keeps_other_workers():
     main.invoke.assert_not_awaited()              # 남은 워커 1개 → 합성 없이 그대로
 
 
+def test_synth_input_ends_with_always_rules(monkeypatch):
+    """멀티 도메인 종합기도 전역 지시를 맨 끝에 받는다 — 단일 워커 턴의 턴 컨텍스트 블록과 같은 자리."""
+    from types import SimpleNamespace
+    import agent_arch.agents.context as ctx
+    monkeypatch.setattr(ctx, "get_memory_recall", lambda: SimpleNamespace(strict=[{"content": "답변 첫 줄에 [요약]을 붙인다"}], system_block=""))
+    msgs = _sup._synth_messages("q", [("web", LoopResult(content="a", finish_reason="stop")), ("talk", LoopResult(content="b", finish_reason="stop"))])
+    assert msgs[-1].content.rstrip().endswith("- 답변 첫 줄에 [요약]을 붙인다")
+    monkeypatch.setattr(ctx, "get_memory_recall", lambda: None)
+    assert "[항상 지킬 사용자 규칙" not in _sup._synth_messages("q", [("web", LoopResult(content="a", finish_reason="stop"))])[-1].content
+
+
+@pytest.mark.asyncio
+async def test_read_and_write_texts_are_reconciled_not_joined(monkeypatch):
+    """로컬(2026-09-29): 규칙 삭제 답이 '저장되어 있습니다… 지우려면 말씀해 주세요'(조회) + '삭제 완료'(실행)로 이어졌다."""
+    async def fake_worker(llm, query, messages, tools, search_fn, max_iter, **kwargs):
+        if any(t.name == "memory_forget" for t in tools):
+            return LoopResult(content="삭제 완료했습니다.", finish_reason="stop")
+        return LoopResult(content="해당 지시가 저장되어 있습니다. 지우려면 말씀해 주세요.", finish_reason="stop")
+    seen = {}
+    async def fake_reconcile(make_fn, domain, messages, read_text, write_text):
+        seen.update(read=read_text, write=write_text)
+        return "[요약] 규칙을 지웠습니다."
+    monkeypatch.setattr(_sup, "run_react_graph", fake_worker)
+    monkeypatch.setattr(_sup, "_reconcile_read_write", fake_reconcile)
+    router = _llm_json('{"domains":["memory"],"subqueries":{"memory":"규칙 확인"},"actions":{"memory":"규칙 삭제"},"confidence":0.9}')
+    async def resolve(query, domain):
+        return [_make_tool("memory_forget"), _make_tool("memory_search")] if "삭제" in query else [_make_tool("memory_search")]
+    r = await run_supervisor(MagicMock(), "그 규칙 지워줘", [Message(role="user", content="그 규칙 지워줘")],
+                             resolve_tools_fn=resolve, make_worker_llm_fn=_wllm_factory(_single_answer_specs),
+                             fallback_fn=AsyncMock(), router_llm=router)
+    assert r.content == "[요약] 규칙을 지웠습니다." and "저장되어" in seen["read"] and "삭제 완료" in seen["write"]
+
+
 @pytest.mark.asyncio
 async def test_all_workers_failing_falls_back():
     """워커가 전부 예외면 기존 규칙대로 fallback."""

@@ -73,6 +73,9 @@ def resolve_priority(draft: AtomDraft, decision: DedupDecision, targets: list[di
     pool = [draft.priority] + [int(t.get("priority", 50)) for t in targets]
     if action in ("update", "merge") and PRIORITY_STRICT in pool:
         return PRIORITY_STRICT
+    # 전역 여부는 쓰는 쪽(명시 저장의 scope·추출기)이 정한다 — 중복 판정기가 새 전역 지시의 등급을 낮추지 않는다.
+    if draft.priority == PRIORITY_STRICT:
+        return PRIORITY_STRICT
     if decision.priority is not None:
         return clamp_priority(decision.priority)
     if action == "merge":
@@ -94,6 +97,10 @@ def resolve_atom_type(draft: AtomDraft, decision: DedupDecision, targets: list[d
     atom_type = decision.atom_type or draft.atom_type
     if (action in ("update", "merge") and atom_type == "persona"
             and any(t.get("atom_type") == "instruction" for t in targets)):
+        return "instruction"
+    # 전역(-1)으로 못 박은 새 지시는 지시로 남는다 — 지운 규칙을 다시 저장하자 판정기가 "규칙을 삭제했다" 기록에 합쳐
+    # persona 로 바꿨고, 전역 등급만 얹힌 persona 는 전역 목록(지시만 읽음)에서도 빠졌다(로컬 2026-09-29).
+    if draft.atom_type == "instruction" and draft.priority == PRIORITY_STRICT and atom_type != "instruction":
         return "instruction"
     return atom_type
 
@@ -129,6 +136,17 @@ def _id_grounding_targets(draft: AtomDraft, targets: list[dict]) -> list[dict]:
             continue
         out.append(t)
     return out
+
+
+def _strict_promotion_targets(draft: AtomDraft, targets: list[dict]) -> list[dict]:
+    """skip 판정을 전역 승격(update)으로 올려야 하는 대상 — 신규가 전역 지시(-1)인데 같은 내용의 기존 지시는 아직 일반 등급.
+
+    판정기는 문장만 보고 "같은 규칙"이라 skip 한다. 그러면 사용자가 "그건 항상 지켜"라고 다시 말해도 등급이 그대로라
+    상관없는 질문에는 계속 회상되지 않는다. 남의 말이 섞인 기억은 오를 수 없다(``_strict_allowed``).
+    """
+    if draft.atom_type != "instruction" or draft.priority != PRIORITY_STRICT or not _strict_allowed(draft, targets):
+        return []
+    return [t for t in targets if t.get("atom_type") == "instruction" and int(t.get("priority", 50)) != PRIORITY_STRICT]
 
 
 def stamp_place(payload: dict, draft: AtomDraft, targets: list[dict]) -> dict:
@@ -218,7 +236,7 @@ async def apply_decisions(
         try:
             targets = await get_active_atoms_by_ids(user_sub, decision.target_ids) if decision.target_ids else []
             if action == "skip":
-                promoted = _id_grounding_targets(draft, targets)
+                promoted = _id_grounding_targets(draft, targets) or _strict_promotion_targets(draft, targets)
                 if not promoted:
                     if decision.target_ids:
                         await touch_atoms(user_sub, decision.target_ids)
@@ -229,13 +247,20 @@ async def apply_decisions(
                 # 것을 유지하고 payload 만 채운 update 로 올린다(결정적 규칙, 판정기 재호출 없음).
                 targets = promoted
                 action = "update"
-                decision = DedupDecision(
-                    index=decision.index, action="update", target_ids=[t["id"] for t in promoted],
-                    content=next((t.get("content") for t in reversed(promoted) if t.get("content")), None),
-                    atom_type="alias",
-                    priority=max([draft.priority, *[int(t.get("priority", 50)) for t in promoted]]),
-                )
-                stats.id_grounded += 1
+                if draft.atom_type == "alias":
+                    decision = DedupDecision(
+                        index=decision.index, action="update", target_ids=[t["id"] for t in promoted],
+                        content=next((t.get("content") for t in reversed(promoted) if t.get("content")), None),
+                        atom_type="alias",
+                        priority=max([draft.priority, *[int(t.get("priority", 50)) for t in promoted]]),
+                    )
+                    stats.id_grounded += 1
+                else:   # 같은 규칙을 '항상'으로 다시 못 박음 — 문장은 기존 것, 등급만 전역으로
+                    decision = DedupDecision(
+                        index=decision.index, action="update", target_ids=[t["id"] for t in promoted],
+                        content=next((t.get("content") for t in reversed(promoted) if t.get("content")), None),
+                        atom_type="instruction", priority=PRIORITY_STRICT,
+                    )
 
             if action in ("update", "merge") and not targets:
                 action = "store"

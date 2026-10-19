@@ -1,7 +1,8 @@
 """명시 저장·잊기 — memory_remember / memory_forget 도구의 v2 백엔드.
 
 배치를 기다리지 않고 즉시 L1 에 쓰되, 자동 추출과 **같은 판정기**를 거친다(중복이면 skip/merge,
-모순이면 update). 명시 저장은 priority 80, "항상/무조건/절대" 가 박히면 -1(전역 강제).
+모순이면 update). 명시 저장은 priority 80, 도구가 scope=always(어떤 질문에나 적용되는 응답 방식)로 넘기면 -1(전역 강제).
+scope 가 없을 때만 예전처럼 "항상/무조건/절대" 표지로 판정한다.
 """
 from __future__ import annotations
 
@@ -22,6 +23,26 @@ EXPLICIT_PRIORITY = 80
 STRICT_MARKERS: tuple[str, ...] = ("항상", "무조건", "절대", "앞으로 계속", "매번")
 
 
+SCOPE_ALWAYS = "always"
+SCOPE_WHEN_RELEVANT = "when_relevant"
+
+
+def is_always_scope(scope: Optional[str], text: str) -> bool:
+    """전역(항상 주입) 규칙인가 — 도구가 준 scope 가 우선, 없을 때만 표지 단어로 본다.
+
+    예전엔 표지 단어만 봤다. 모델은 도구에 넘길 때 사용자 말을 다듬어 쓰므로("항상 서명 붙여줘" →
+    "모든 답변의 마지막 줄에 서명을 붙인다") 표지가 빠져 일반 규칙(80)이 되고, 상관없는 질문에는
+    회상되지 않았다(로컬 2026-09-29). 항상 쓰는 기억과 필요할 때 찾는 기억을 **저장할 때 구조로**
+    가르는 것이 공개 레퍼런스들의 공통 설계다(코어 메모리 블록, 사용자 지정 지침, 절차 기억).
+    """
+    s = str(scope or "").strip().lower()
+    if s == SCOPE_ALWAYS:
+        return True
+    if s == SCOPE_WHEN_RELEVANT:
+        return False
+    return any(m in text for m in STRICT_MARKERS)
+
+
 def infer_atom_type(content: str, requested: Optional[str]) -> str:
     """도구가 준 종류를 v2 4종으로. 없으면 instruction(v1 의 directive 기본과 같은 뜻)."""
     return normalize_atom_type(requested) or "instruction"
@@ -33,6 +54,7 @@ async def save_explicit_atom(
     *,
     atom_type: Optional[str] = None,
     company_scope: Optional[str] = None,
+    scope: Optional[str] = None,
 ) -> Optional[dict]:
     """명시 저장. SoR 값이면 None(저장 거부). 아니면 {id, action, atom_type, content}.
 
@@ -44,7 +66,7 @@ async def save_explicit_atom(
     atype = infer_atom_type(text, atom_type)
     if looks_like_sor(text, atype):
         return None
-    priority = PRIORITY_STRICT if atype == "instruction" and any(m in text for m in STRICT_MARKERS) else EXPLICIT_PRIORITY
+    priority = PRIORITY_STRICT if atype == "instruction" and is_always_scope(scope, text) else EXPLICIT_PRIORITY
     # 지금 있는 자리를 찍는다 — 분리된 창(전용 앱)·메신저 채널에서 못 박은 규칙이 다른 자리까지
     # 따라다니면 기억이 섞인다. 자동 추출은 근거 턴의 metadata 로 같은 일을 하는데
     # (extractor.stamp_places) 명시 저장만 빠져 있었다. 장소 없는 자리(패널·DM)는 None →
@@ -117,7 +139,8 @@ async def forget_scene(user_sub: str, name: str) -> Optional[dict]:
             continue
         await repo.delete_scene(user_sub, cand)
         logger.info("memory_v2 forget scene user=%s name=%s", user_sub[:8], cand)
-        from agent_arch.services.memory_v2.recall import invalidate_stable_block
+        from agent_arch.services.memory_v2.recall import invalidate_stable_block, mark_upper_stale
+        await mark_upper_stale(user_sub)
         await invalidate_stable_block(user_sub)
         from agent_arch.services.memory_v2.layers import schedule_upper_layers
         schedule_upper_layers(user_sub, delay=0, force_persona=True, fresh_persona=True)
@@ -138,7 +161,8 @@ async def forget_atom(user_sub: str, atom_id: str) -> Optional[dict]:
     except Exception as e:
         logger.debug("memory_v2 forget Qdrant 삭제 실패(다음 검색은 PG status 로 걸러짐): %s", e)
     logger.info("memory_v2 forget user=%s atom=%s type=%s", user_sub[:8], atom_id[:8], row.get("atom_type"))
-    from agent_arch.services.memory_v2.recall import invalidate_stable_block
+    from agent_arch.services.memory_v2.recall import invalidate_stable_block, mark_upper_stale
+    await mark_upper_stale(user_sub)
     await invalidate_stable_block(user_sub)
     # 지운 기억이 페르소나·장면에 남지 않게 상위층을 fresh 로 즉시 재작성한다(v1 sticky 프로필 실측).
     from agent_arch.services.memory_v2.layers import schedule_upper_layers

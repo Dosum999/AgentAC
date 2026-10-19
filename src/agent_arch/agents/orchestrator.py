@@ -531,6 +531,7 @@ class AgentOrchestrator:
         # 안정 블록(페르소나·장면 내비)은 system 쪽 턴 컨텍스트, 턴별 블록은 마지막 user 에.
         memory_block = ""
         memory_stable_block = ""
+        always_rules: list = []
         if settings.enable_user_memory and user_info and user_info.get("sub"):
             try:
                 from agent_arch.services.memory_v2 import is_active as _memory_v2_active
@@ -548,6 +549,7 @@ class AgentOrchestrator:
                     # 구조체를 턴 전체에 흘린다 — 도구 로드아웃·라우터 힌트·워커 스코프·종합기가 읽는다.
                     set_memory_recall(recall_v2)
                     memory_block, memory_stable_block = recall_v2.turn_block, recall_v2.system_block
+                    always_rules = [a.get("content") for a in (recall_v2.strict or []) if isinstance(a, dict)]
                     # 메모리 도구를 안 물리는 모드(가이드·도구를 재구성하는 전용 채널)는 안내를 뺀다 —
                     # 부를 수 없는 도구를 가리키는 죽은 지시가 되고, "저장 도구가 없다고 답하지 말
                     # 것"까지 못 박혀 "기억해둬" 요청에서 막다른 길이 된다. 페르소나·전역 지시·장면
@@ -596,6 +598,7 @@ class AgentOrchestrator:
             # 사람들끼리 나눈 말은 여기로만 들어온다.
             thread_posts=get_thread_context(),
             glossary_block=glossary_block,
+            always_rules=always_rules,
         )
         # conversation_id/user_sub 를 함께 넘기면 Redis 가 비었을 때 Postgres 에서 되살린다
         # (24시간 지난 대화에서 "어제 그거" 가 되게). 없으면 예전처럼 빈 이력이다.

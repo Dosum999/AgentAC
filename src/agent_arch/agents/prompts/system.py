@@ -1536,6 +1536,7 @@ def build_turn_context(
     origin: Optional[dict] = None,
     thread_posts: Optional[list] = None,
     glossary_block: Optional[str] = None,
+    always_rules: Optional[list] = None,
 ) -> str:
     """시스템 프롬프트 밖으로 뺀 가변 컨텍스트를 한 덩어리로 반환한다.
 
@@ -1583,6 +1584,13 @@ def build_turn_context(
         parts.append(memory_block)
     # 맨 끝 — 질문 바로 뒤에서 가장 가깝게 읽히는 자리다.
     parts.append(glossary_block or "")
+    # 항상 지킬 사용자 규칙(전역 지시)만 따로 추려 가장 끝에 둔다. 안정 블록 안에서는 도구 안내·페르소나·장면 목록 사이에
+    # 묻혀, 규칙이 실린 턴에서도 서식·서명 규칙을 절반쯤 놓쳤다(로컬 2026-09-29 vllm, 6턴 중 2~3턴 적용). 레퍼런스의
+    # 항상-적용 기억(공개 레퍼런스의 코어 메모리 블록·사용자 지정 지침)은 분리된 짧은 블록이다.
+    rules = [str(r).strip() for r in (always_rules or []) if str(r or "").strip()]
+    if rules:
+        parts.append("[항상 지킬 사용자 규칙 — 모든 답변에 적용. 이번 메시지에서 다르게 요청하면 그 요청 우선]\n"
+                     + "\n".join(f"- {r}" for r in rules))
     parts = [p for p in parts if p]
     if not parts:
         return ""

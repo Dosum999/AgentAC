@@ -135,9 +135,19 @@ class MemoryRememberTool(BaseTool):
             "record_type": {
                 "type": "string",
                 "description": "종류(기본 instruction=지시). instruction = 앞으로 어떻게 해 달라는 규칙"
-                "('앞으로 ~해', '~할 때는 ~로 해', 작업별 기본값 — 예: '점심 상신 시 결재자는 박준흥으로 한다') / "
+                "('앞으로 ~해', '~할 때는 ~로 해', 작업별 기본값 — 예: '점심 상신 시 결재자는 김부장으로 한다') / "
                 "persona = 사용자에 대한 사실·취향(예: '오전 회의를 선호하지 않는다') / episodic = 사건. "
                 "행동 규칙을 persona 로 저장하면 참고 정보로만 쓰인다. v1 이름(directive/preference/fact)도 허용.",
+            },
+            "scope": {
+                "type": "string",
+                "enum": ["always", "when_relevant"],
+                "description": "지시(instruction)의 적용 범위. always = 어떤 질문·작업에나 적용되는 응답 방식"
+                "(서식·표 사용·호칭·언어·말투·답변 길이·서명 — 예: '답변에 표를 쓰지 않는다', '답변 끝에 서명을 붙인다') "
+                "→ 매 답변에 항상 적용된다. when_relevant = 특정 작업·대상에만 쓰는 조건·기본값"
+                "(예: '점심 상신 시 결재자는 김부장으로 한다') → 그 작업을 할 때만 적용된다. "
+                "사용자가 '항상'이라고 말하지 않아도 응답 방식 전반에 관한 규칙이면 always. "
+                "**범위를 사용자에게 되묻지 말고 네가 판단해 넣어라** — 애매하면 when_relevant.",
             },
         }
 
@@ -166,7 +176,9 @@ class MemoryRememberTool(BaseTool):
         if _memory_v2_active():
             from agent_arch.services.memory_v2.explicit import save_explicit_atom
 
-            saved = await save_explicit_atom(sub, content, atom_type=rtype_raw, company_scope=ctx.get("company"))
+            scope_raw = str(kwargs.get("scope") or "").strip() or None
+            saved = await save_explicit_atom(sub, content, atom_type=rtype_raw, company_scope=ctx.get("company"),
+                                             scope=scope_raw)
             if saved is None:
                 return ToolResult(
                     success=True,
