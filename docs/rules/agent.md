@@ -291,6 +291,10 @@ flowchart TD
 - **왜**: 바닐라 Redis 는 공식 Redis 체크포인터(모듈 요구)를 못 쓴다. 메모리 saver 는 재배포·다중 파드에서 승인 대기 초안을 잃는다.
 - **어떻게**: `agents/graphs/checkpointer.py:get_checkpointer`.
 
+**규칙**: 승인 값으로 도구를 `confirm=True` 직행 실행하는 별도 커밋 엔드포인트를 두지 않는다. 비가역 실행의 입구는 `/resume` 하나다.
+- **왜**: 그런 엔드포인트는 체크포인트의 대기 항목·`pending_id` 대조를 거치지 않아 승인 게이트의 뒷문이 된다.
+- **어떻게**: `api/v1/agent.py` 의 `POST /agent/{conversation_id}/resume`(본문 `pending_id`, 불일치·처리 중 409).
+
 **규칙**: 같은 대화의 승인 재개는 한 번에 하나만 통과시킨다.
 - **왜**: 메신저 카드는 콜백 응답 전까지 버튼이 살아 있다. 1초 간격 두 번 클릭이 같은 interrupt 를 통과해 DM 이 두 번 나갔다.
 - **어떻게**: `resume.py:resume_guard`(Redis 락 + 로컬 락 대비책).
