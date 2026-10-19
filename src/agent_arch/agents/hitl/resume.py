@@ -235,7 +235,7 @@ async def resume_action(
 
     실행/스킵 후 큐에 다음 항목이 남아 있으면 그 draft 페이로드를 ``next_pending`` 으로 함께
     반환한다(없으면 None=마지막). 호출 전 호출자가 ``set_user_context`` 로 사용자 명의를
-    설정해야 도구가 본인 명의로 실행된다(``workspace.py:_commit`` 와 동일).
+    설정해야 도구가 본인 명의로 실행된다.
 
     Returns:
         {"success": bool, "view"?, "error"?, "rejected"?, "next_pending": dict|None}

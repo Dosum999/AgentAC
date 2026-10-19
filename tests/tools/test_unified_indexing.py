@@ -130,7 +130,7 @@ class TestStickyPrevTurnTools:
     def test_resolves_registry_tool(self, sticky, monkeypatch):
         import agent_arch.agents.orchestrator as orch
 
-        # 채널 전용 도메인(mespoc)은 관문 바인딩을 요구하므로, resolve 경로 자체는
+        # 채널 전용 도메인(apppoc)은 관문 바인딩을 요구하므로, resolve 경로 자체는
         # 도메인 제약이 없는 이름으로 확인한다 (채널 가드는 test_channel_scoped_sticky).
         registry_tool = FakeTool("hr_today_attendance", "retrieved")
         monkeypatch.setattr(
@@ -191,20 +191,20 @@ class TestStickyPrevTurnTools:
         assert recovered == [normal]
 
     def test_channel_scoped_tool_needs_its_gateway(self, sticky, monkeypatch):
-        """채널 전용 도메인(mespoc)은 그 채널의 관문이 이 턴에 바인딩됐을 때만 복원된다.
+        """채널 전용 도메인(apppoc)은 그 채널의 관문이 이 턴에 바인딩됐을 때만 복원된다.
 
         관문 전역 OFF 로 발견은 막혀 있지만 sticky 는 이름을 그대로 되살리므로, MES
         앱 채널 대화가 일반 채팅으로 이어지면 채널 밖에서 되살아났다.
         """
         import agent_arch.agents.orchestrator as orch
 
-        monkeypatch.setitem(orch._CHANNEL_SCOPED_PREFIXES, "mespoc_", "find_mespoc_tools")
-        normal = FakeTool("mespoc_skill_lot_progress", "retrieved")
+        monkeypatch.setitem(orch._CHANNEL_SCOPED_PREFIXES, "apppoc_", "find_apppoc_tools")
+        normal = FakeTool("apppoc_skill_lot_progress", "retrieved")
         monkeypatch.setattr(
             orch.ToolRegistry, "get",
             classmethod(lambda cls, n: normal if n == normal.name else None),
         )
-        msgs = [self._tool_msg("mespoc_skill_lot_progress")]
+        msgs = [self._tool_msg("apppoc_skill_lot_progress")]
 
         assert sticky(msgs, set()) == []                          # 채널 밖 — 차단
-        assert sticky(msgs, {"find_mespoc_tools"}) == [normal]     # 채널 안 — 유지
+        assert sticky(msgs, {"find_apppoc_tools"}) == [normal]     # 채널 안 — 유지

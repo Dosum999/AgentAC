@@ -54,6 +54,20 @@ flowchart TD
   - `always_action_domains`, `domain_addenda`: 늘 실행 질의로 보낼 도메인, 도메인별 워커 지침
   - `eval_sink`: 병렬(그림자) 평가 결과 저장소
 
+**규칙**: 새 업무 도메인은 `register_domain` 하나로 관문·라우터 카드·도구 접두사를 함께 등록한다. 라우터·supervisor 는 도메인 표를 매번 읽는다(import 시점에 굳히지 않는다).
+- **왜**: 도메인 목록이 코어의 하드코딩 dict 였고 라우터가 import 때 tuple 로 굳혀서, 도메인 하나를 더하려면 코어를 고쳐야 했다. 접두사를 등록하지 않으면 그 도메인 도구가 "어느 도메인에도 안 속한 글로벌 유틸리티"로 판정돼 모든 워커에 얹힌다.
+- **어떻게**: `agents/tools/tool_search.py:register_domain(domain, gateway_tool=, intent=, examples=, tool_prefix=)`, `agents/graphs/router.py:_LiveDomains/_LiveGatewayMap`.
+
+**규칙**: 관문은 벡터 인덱스가 죽어도 확장이 직접 주는 도메인 도구(`extensions.domain_tools`)는 돌려준다.
+- **왜**: 인덱스 검색 예외에서 바로 실패를 돌려주던 탓에, 인덱스와 무관한 도메인 도구까지 못 썼다.
+
+**조립 예시**: `src/agent_arch/examples/helpdesk.py` 가 헬프데스크 티켓 도메인 하나를 코어 수정 없이 끼운다.
+1. 조회 도구 2개 + 비가역 도구 1개(`confirm` 인자, false 면 draft view 만 돌려줌)를 만든다.
+2. `register_domain` 으로 관문 `find_helpdesk_tools`·라우터 카드·`helpdesk_` 접두사를 등록한다.
+3. 슬롯을 채운다: `domain_tools`(관문이 돌려줄 도구), `approval_required`·`action_done_messages`(승인 필요·완료 문구), `post_approval`(요청자 알림), `mode_prompts`(전용 채널 모드), `glossary_source`.
+4. `create_app(setup=install)` 로 띄운다(`create_example_app`).
+- 끝까지 도는 테스트: `tests/examples/test_helpdesk_example.py` — 모델이 처음부터 `confirm=true` 로 불러도 초안으로 바뀌고, 옛 카드 id 로는 실행되지 않으며, 맞는 id 로 재개해야 티켓이 닫히고 후처리가 붙는다.
+
 ---
 
 ## 2. 요청 컨텍스트와 동시성

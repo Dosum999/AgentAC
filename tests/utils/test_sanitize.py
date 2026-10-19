@@ -131,10 +131,10 @@ def empty_tool_cache(isolated_cache):
 def stub_tool_cache(isolated_cache):
     """대표 도구 이름들을 동적 소스로 stub한다 (나머지 두 소스는 빈 상태)."""
     stub_names = [
-        "mespoc_service_list_defective_performances_quality_i_53aeef98",
+        "apppoc_service_list_defective_performances_quality_i_53aeef98",
         "hr_service_attendance_read",
         "mattermost_skill_find_channels",
-        "mespoc_service_assets_list",
+        "apppoc_service_assets_list",
     ]
     with _stub_sources(dynamic=stub_names):
         yield stub_names
@@ -148,7 +148,7 @@ class TestWhitelistMatching:
     """tool_loader._cache의 실제 도구명에 대한 정확 매칭."""
 
     def test_hex_suffix_tool_in_korean_sentence(self, stub_tool_cache):
-        text = "앞서 mespoc_service_list_defective_performances_quality_i_53aeef98 도구로 조회한 결과"
+        text = "앞서 apppoc_service_list_defective_performances_quality_i_53aeef98 도구로 조회한 결과"
         assert sanitize_tool_names(text) == "앞서 내부 도구로 조회한 결과"  # 중복 "도구" 흡수
 
     def test_no_hex_suffix_tool(self, stub_tool_cache):
@@ -161,7 +161,7 @@ class TestWhitelistMatching:
 
     def test_tool_in_backticks(self, stub_tool_cache):
         """치환어를 감싼 백틱은 함께 흡수한다 — 한국어 명사구를 코드 스팬에 둘 이유가 없다."""
-        text = "`mespoc_service_assets_list`를 호출"
+        text = "`apppoc_service_assets_list`를 호출"
         assert sanitize_tool_names(text) == "내부 도구를 호출"
 
     def test_multiple_tools_in_one_text(self, stub_tool_cache):
@@ -234,9 +234,9 @@ class TestKoreanBoundary:
     """한국어 사이에 박힌 ASCII 식별자를 정확히 매칭한다."""
 
     def test_korean_directly_around_tool(self, stub_tool_cache):
-        text = "조회를mespoc_service_assets_list로처리"
+        text = "조회를apppoc_service_assets_list로처리"
         out = sanitize_tool_names(text)
-        assert "mespoc_service" not in out
+        assert "apppoc_service" not in out
         assert "내부 도구" in out
 
     def test_punctuation_boundary(self, stub_tool_cache):
@@ -290,7 +290,7 @@ class TestStreamSanitizer:
         out_parts = [s.feed(c) for c in chunks]
         out_parts.append(s.flush())
         result = "".join(out_parts)
-        assert "mespoc_service" not in result
+        assert "apppoc_service" not in result
         assert "53aeef98" not in result
         assert "내부 도구" in result
 
@@ -376,9 +376,9 @@ class TestCacheLoadFailure:
             mock_loader._cache = None
             mock_loader.load_from_json.side_effect = RuntimeError("disk error")
             # 화이트리스트는 못 만들지만 안전망 패턴은 동작해야 한다.
-            text = "mespoc_service_assets_list로 조회"
+            text = "apppoc_service_assets_list로 조회"
             out = sanitize_tool_names(text)
-            assert "mespoc_service" not in out
+            assert "apppoc_service" not in out
             assert "내부 도구" in out
 
 
@@ -464,12 +464,12 @@ class TestMultiSourceWhitelist:
 
     def test_all_three_sources_merged(self, isolated_cache):
         with _stub_sources(
-            dynamic=["mespoc_service_assets_list"],
+            dynamic=["apppoc_service_assets_list"],
             registry=["mail_read_message"],
             config=["hr_leave_balance"],
         ):
             out = sanitize_tool_names(
-                "mespoc_service_assets_list 와 mail_read_message 와 hr_leave_balance"
+                "apppoc_service_assets_list 와 mail_read_message 와 hr_leave_balance"
             )
             assert out.count("내부 도구") == 3
 

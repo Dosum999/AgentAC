@@ -61,6 +61,15 @@ class Settings(BaseSettings):
     # 운영은 false. 켜 두면 인증 없는 경로까지 포함한 API 목록 전체가 외부에 공개.
     # ENVIRONMENT 와 별개 설정 = 환경 이름과 문서 공개 여부를 각각 정할 수 있게
     api_docs_enabled: bool = Field(default=True, alias="API_DOCS_ENABLED")
+    # 기동 시 외부 의존(Redis·PostgreSQL·Qdrant·MCP·백그라운드 루프)에 연결할지. false 면 연결 없이 뜬다
+    # (테스트·로컬 조립 확인용). 연결 실패 자체는 이 값과 무관하게 경고만 남기고 넘어간다.
+    startup_connect_external: bool = Field(default=True, alias="STARTUP_CONNECT_EXTERNAL")
+    # 인증. 기본(gateway)은 게이트웨이가 주입한 X-User-Sub 필수. dev 는 헤더 없을 때 DEV_USER_* 고정 사용자로 통과.
+    auth_mode: str = Field(default="gateway", alias="AUTH_MODE")
+    dev_user_sub: str = Field(default="dev-user", alias="DEV_USER_SUB")
+    dev_user_email: str = Field(default="dev@example.com", alias="DEV_USER_EMAIL")
+    dev_user_name: str = Field(default="개발자", alias="DEV_USER_NAME")
+    dev_user_company: str = Field(default="", alias="DEV_USER_COMPANY")
     host: str = Field(default="0.0.0.0", alias="HOST")
     port: int = Field(default=8000, alias="PORT")
 
@@ -102,6 +111,8 @@ class Settings(BaseSettings):
     frappe_api_secret: Optional[str] = Field(default=None, alias="FRAPPE_API_SECRET")
     # 회사별 허용목록 Redis 캐시 TTL(초). 핫패스 지연 최소화 + PA 변경 반영 지연의 균형.
     company_providers_cache_ttl: int = Field(default=120, alias="COMPANY_PROVIDERS_CACHE_TTL")
+    # 허용 LLM provider(콤마 구분). 비우면 게이트 없음 — 요청값 또는 DEFAULT_LLM_PROVIDER.
+    llm_allowed_providers: str = Field(default="", alias="LLM_ALLOWED_PROVIDERS")
     # 용어 사전 Redis 캐시 TTL(초). PA 가 용어를 고치면 이만큼 뒤에 답변에 반영된다.
     # 플랫폼 매니저 화면이 저장 후 이 시간만큼 `반영 중` 을 표시한다(GLOSSARY_SYNC_SECONDS)
     # — 한쪽만 바꾸면 화면이 "반영됨"이라는데 실제로는 아직인 구간이 생긴다.
@@ -248,7 +259,7 @@ class Settings(BaseSettings):
 
     # 외부 서비스 Base URL (API Gateway 경유)
     hr_service_base_url: str = Field(default="http://hr-service", alias="HR_SERVICE_BASE_URL")
-    session_cookie_name: str = Field(default="dmp_sid", alias="SESSION_COOKIE_NAME")
+    session_cookie_name: str = Field(default="sid", alias="SESSION_COOKIE_NAME")
 
     # file-service(file-service) — 채팅 첨부파일 Object Storage 영속화.
     # base_url + api_key 둘 다 설정돼야 활성화. 미설정이면 첨부 저장을 조용히 건너뛴다

@@ -13,7 +13,7 @@
        interrupt 지점부터 이어져 ``confirm=True`` 로 실제 실행한다.
 
 실행 시 사용자 명의(게이트웨이 헤더 복원)는 호출자(resume 엔드포인트)가
-``set_user_context`` 로 현재 async 컨텍스트에 설정한다(``workspace.py:_commit`` 와 동일).
+``set_user_context`` 로 현재 async 컨텍스트에 설정한다.
 """
 from __future__ import annotations
 

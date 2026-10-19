@@ -69,7 +69,7 @@ _MAILCOW_POLICIES = {
     "mail_read_message": ToolPolicy(permission=_MAIL_ACCESS),
     "mail_send_message": ToolPolicy(permission=_MAIL_ACCESS),
     # 연락처 저장(명함 OCR → 주소록, SOGo CardDAV). 쓰기 액션이라 HITL 2단계 확인
-    # (hitl/policy.py + workspace.py /workspace/mail/contact)로 게이팅한다.
+    # (hitl/policy.py 승인 게이트)로 게이팅한다.
     "mail_save_contact": ToolPolicy(permission=_MAIL_ACCESS),
     # 웹메일 작성창 열기(발송 없음). 정책 매핑이 없으면 deny-skip 되어 미등록되므로 필수.
     "mail_compose": ToolPolicy(permission=_MAIL_ACCESS),

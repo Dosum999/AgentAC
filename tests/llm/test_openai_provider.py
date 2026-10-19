@@ -287,7 +287,7 @@ class TestOpenAIMessageConversion:
 
     @pytest.mark.asyncio
     async def test_reasoning_effort_is_sent_only_when_asked(self):
-        """추론 강도는 옵트인 — 호출자가 줄 때만 싣는다(SCMS 거래 구조 추출기가 쓴다)."""
+        """추론 강도는 옵트인 — 호출자가 줄 때만 싣는다(PROC 거래 구조 추출기가 쓴다)."""
         llm = _make_openai_llm()
         create = AsyncMock(return_value=_make_openai_response())
         llm.client.chat.completions.create = create

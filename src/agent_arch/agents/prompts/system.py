@@ -45,7 +45,7 @@ IMAGE_READING_RULES = """\
 #   <<TOOL_GUIDANCE>>           : enabled+core 도구의 prompt_guidance 규칙 문단(없으면 제거)
 #   <<ANSWER_LANGUAGE>>         : 답변 언어 지시 절(턴의 목표 언어로 렌더 — §답변 언어)
 #   <<ANSWER_LANGUAGE_NAME>>    : 지시문 안에 끼우는 언어명("한국어"/"영어"/"중국어"/"일본어")
-#   <<BOT_MENTION>>             : 사내 메신저 봇 계정 멘션 토큰(예: "@dat-v") — 환경마다 다름
+#   <<BOT_MENTION>>             : 사내 메신저 봇 계정 멘션 토큰(예: "@agent") — 환경마다 다름
 # 그 밖의 준수사항·지시사항 본문은 정적 유지한다.
 
 PRODUCTION_SYSTEM_PROMPT = """\
@@ -1012,7 +1012,7 @@ def _render_bot_mention() -> str:
     영향을 받지 않고 안내 문구만 틀린다.
 
     Returns:
-        str: 예) ``@dat-v``
+        str: 예) ``@agent``
     """
     return f"@{settings.mattermost_bot_username.lstrip('@')}"
 

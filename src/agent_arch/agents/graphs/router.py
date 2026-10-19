@@ -25,8 +25,70 @@ from agent_arch.agents.tools.tool_search import _DOMAIN_TOOLS
 
 logger = logging.getLogger(__name__)
 
+class _LiveDomains:
+    """_DOMAIN_TOOLS 의 키를 매번 읽는 집합 뷰 — register_domain 으로 늘어난 도메인도 바로 보인다.
+
+    import 시점에 tuple 로 굳혀 두면 확장이 도메인을 더해도 라우터·supervisor 가 몰랐다.
+    """
+
+    def __init__(self, exclude=frozenset()):
+        self._exclude = exclude
+
+    def _keys(self):
+        return [d for d in _DOMAIN_TOOLS if d not in self._exclude]
+
+    def __contains__(self, d) -> bool:
+        return d in _DOMAIN_TOOLS and d not in self._exclude
+
+    def __iter__(self):
+        return iter(self._keys())
+
+    def __len__(self) -> int:
+        return len(self._keys())
+
+    def __repr__(self) -> str:
+        return f"LiveDomains({self._keys()!r})"
+
+
+class _LiveGatewayMap(dict):
+    """도메인 ↔ 관문 도구 이름 매핑을 매번 _DOMAIN_TOOLS 에서 계산하는 읽기 전용 dict 뷰."""
+
+    def __init__(self, reverse: bool):
+        super().__init__()
+        self._reverse = reverse
+
+    def _snapshot(self) -> dict:
+        if self._reverse:
+            return {spec[0]: d for d, spec in _DOMAIN_TOOLS.items()}
+        return {d: spec[0] for d, spec in _DOMAIN_TOOLS.items()}
+
+    def get(self, key, default=None):
+        return self._snapshot().get(key, default)
+
+    def __getitem__(self, key):
+        return self._snapshot()[key]
+
+    def __contains__(self, key) -> bool:
+        return key in self._snapshot()
+
+    def __iter__(self):
+        return iter(self._snapshot())
+
+    def __len__(self) -> int:
+        return len(self._snapshot())
+
+    def keys(self):
+        return self._snapshot().keys()
+
+    def values(self):
+        return self._snapshot().values()
+
+    def items(self):
+        return self._snapshot().items()
+
+
 # 라우팅 대상 도메인 = tool_search 의 도메인 키(find_<domain>_tools 가 이미 쓰는 분류).
-DOMAINS = tuple(_DOMAIN_TOOLS.keys())
+DOMAINS = _LiveDomains()
 WEB_DOMAIN = "web"
 
 
@@ -45,12 +107,12 @@ def domain_available(domain: str) -> bool:
 # 일반 채팅에 새어 노출된다. 관문을 꺼도(tools_config enabled:false) 도메인 목록은 _DOMAIN_TOOLS 를
 # 그대로 펼치므로, 여기서 빼지 않으면 라우터가 도구 0개인 워커로 보내 도구 없이 답을 짓는다.
 _SUPERVISOR_EXCLUDED_DOMAINS: frozenset[str] = frozenset()
-ROUTABLE_DOMAINS = frozenset(d for d in DOMAINS if d not in _SUPERVISOR_EXCLUDED_DOMAINS)
+ROUTABLE_DOMAINS = _LiveDomains(exclude=_SUPERVISOR_EXCLUDED_DOMAINS)
 
 # find_<domain>_tools 이름 → 도메인 역매핑 (직전 턴 도구에서 도메인 도출용).
-_FIND_TOOL_DOMAIN = {spec[0]: domain for domain, spec in _DOMAIN_TOOLS.items()}
+_FIND_TOOL_DOMAIN = _LiveGatewayMap(reverse=True)
 # 도메인 → find_<domain>_tools 이름 (워커 스코프에 자기 도메인 발견도구 포함용).
-FIND_TOOL_FOR_DOMAIN = {domain: spec[0] for domain, spec in _DOMAIN_TOOLS.items()}
+FIND_TOOL_FOR_DOMAIN = _LiveGatewayMap(reverse=False)
 
 # 도구 이름 프리픽스 → 도메인 (로더 domain 필드가 비었을 때 폴백).
 _PREFIX_DOMAIN = {
@@ -63,7 +125,9 @@ _PREFIX_DOMAIN = {
 
 
 def _prefix_domain(name: str) -> Optional[str]:
-    for pfx, d in _PREFIX_DOMAIN.items():
+    from agent_arch.agents.tools.tool_search import EXTRA_TOOL_PREFIXES
+
+    for pfx, d in {**_PREFIX_DOMAIN, **EXTRA_TOOL_PREFIXES}.items():
         if name.startswith(pfx):
             return d
     return None

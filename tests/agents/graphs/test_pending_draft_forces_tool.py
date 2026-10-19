@@ -2,10 +2,10 @@
 
 **왜 그래프에 있나.** 되물을 값이 남은 초안(`collecting_draft`)이나 거절된 초안
 (`rejected_draft`)이 있으면 그 턴은 조회가 아니라 실행이다. 일반 채널은 supervisor 가
-그 판정을 해 주지만(`_bias_to_action_for_pending_draft`), **채널 스코핑 모드(scms·logistics)
+그 판정을 해 주지만(`_bias_to_action_for_pending_draft`), **채널 스코핑 모드(proc·logistics)
 는 supervisor 를 건너뛴다**(orchestrator `_use_supervisor`). 그래서 같은 일을 여기서 한다.
 
-실측 사고(SCMS 발주 초안): 선택값을 묻는 결과를 받은 뒤 사용자가 "넘어가" 라고 답해도
+실측 사고(PROC 발주 초안): 선택값을 묻는 결과를 받은 뒤 사용자가 "넘어가" 라고 답해도
 모델이 도구를 다시 부르지 않고 **같은 질문을 새로 만들어** 냈다. 그때 제시한 품목 분류가
 도구가 준 목록에 없는 값이었다(지어낸 증거). 같은 화면이 무한히 반복됐다.
 """

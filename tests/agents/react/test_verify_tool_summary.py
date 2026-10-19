@@ -242,7 +242,7 @@ def test_guide_abstain_is_zero():
 def test_dict_field_inside_a_row_does_not_split_the_row():
     raw = json.dumps({"count": 1, "results": [
         {"title": "출고 처리", "content": "출고 화면에서 처리합니다", "author": {"name": "박수미"}}]}, ensure_ascii=False)
-    out = _summarize_result("scms_some_tool", raw)
+    out = _summarize_result("proc_some_tool", raw)
     assert "결과 1건" in out and "출고 화면에서 처리합니다" in out
 
 

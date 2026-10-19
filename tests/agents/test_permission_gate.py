@@ -109,10 +109,10 @@ def test_guest_allowed_when_opt_in(clean_index, profile_guest):
 def test_no_service_permissions_key_denied(clean_index, profile_employee):
     """permissions에 서비스 키 자체가 없음 → 차단."""
     clean_index.register(
-        "scms_tool",
-        PermissionRequirement(service="scms", mode=GateMode.ACCESS_ONLY),
+        "proc_tool",
+        PermissionRequirement(service="proc", mode=GateMode.ACCESS_ONLY),
     )
-    assert is_allowed("scms_tool", profile_employee) is False
+    assert is_allowed("proc_tool", profile_employee) is False
 
 
 def test_empty_service_permissions_denied(clean_index):
@@ -393,16 +393,16 @@ def test_evaluate_no_profile(clean_index):
 
 
 def test_evaluate_no_profile_allows_opted_in_public_tool(clean_index):
-    """PUBLIC + allow_no_profile 은 프로필 없이도 통과한다 (SCMS 처럼 dmp 권한 체계 밖 호스트).
+    """PUBLIC + allow_no_profile 은 프로필 없이도 통과한다 (PROC 처럼 dmp 권한 체계 밖 호스트).
 
     프로필을 그 호스트가 대신 등록하는 길은 막혀 있다 — 프로필은 sub 단위 전체 대체라
     같은 사용자의 dmp 프로필을 덮어쓴다. 그래서 도구가 스스로 선언한다.
     """
     clean_index.register(
-        "scms_tool",
+        "proc_tool",
         PermissionRequirement(service="", mode=GateMode.PUBLIC, allow_no_profile=True),
     )
-    decision = evaluate("scms_tool", None)
+    decision = evaluate("proc_tool", None)
     assert decision.allowed is True
 
 
@@ -441,12 +441,12 @@ def test_evaluate_guest_blocked(clean_index, profile_guest):
 def test_evaluate_no_service_access(clean_index, profile_employee):
     """서비스 사용권 자체가 없음 — 실사용 거부 사유의 거의 전부."""
     clean_index.register(
-        "scms_tool",
-        PermissionRequirement(service="scms", mode=GateMode.ACCESS_ONLY),
+        "proc_tool",
+        PermissionRequirement(service="proc", mode=GateMode.ACCESS_ONLY),
     )
-    decision = evaluate("scms_tool", profile_employee)
+    decision = evaluate("proc_tool", profile_employee)
     assert decision.reason is DenyReason.NO_SERVICE_ACCESS
-    assert decision.service == "scms"
+    assert decision.service == "proc"
 
 
 @pytest.mark.parametrize(
@@ -510,7 +510,7 @@ def test_is_allowed_agrees_with_evaluate(clean_index, profile_employee):
         "ok_tool", PermissionRequirement(service="hr", mode=GateMode.ACCESS_ONLY)
     )
     clean_index.register(
-        "denied_tool", PermissionRequirement(service="scms", mode=GateMode.ACCESS_ONLY)
+        "denied_tool", PermissionRequirement(service="proc", mode=GateMode.ACCESS_ONLY)
     )
     for name in ("ok_tool", "denied_tool", "unregistered_tool"):
         assert is_allowed(name, profile_employee) is evaluate(name, profile_employee).allowed

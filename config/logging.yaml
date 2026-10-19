@@ -6,14 +6,12 @@ formatters:
     format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     datefmt: '%Y-%m-%d %H:%M:%S'
 
-  json:
-    format: '{"time": "%(asctime)s", "name": "%(name)s", "level": "%(levelname)s", "message": "%(message)s"}'
-    datefmt: '%Y-%m-%d %H:%M:%S'
-
   detailed:
     format: '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
     datefmt: '%Y-%m-%d %H:%M:%S'
 
+# 파일 핸들러(RotatingFileHandler)가 필요하면 여기에 추가한다 — 대상 디렉터리가 없으면 기동이 실패하므로
+# 기본 설정에는 두지 않는다.
 handlers:
   console:
     class: logging.StreamHandler
@@ -21,41 +19,20 @@ handlers:
     formatter: default
     stream: ext://sys.stdout
 
-  file:
-    class: logging.handlers.RotatingFileHandler
-    level: DEBUG
-    formatter: detailed
-    filename: logs/app.log
-    maxBytes: 10485760  # 10MB
-    backupCount: 5
-
-  error_file:
-    class: logging.handlers.RotatingFileHandler
-    level: ERROR
-    formatter: detailed
-    filename: logs/error.log
-    maxBytes: 10485760  # 10MB
-    backupCount: 5
-
   # 시스템 오류 이벤트(agent.error_events) 수집 — ERROR 이상 + extra 로 지정한 WARNING 만 받는다.
-  # emit 은 메모리 버퍼에만 넣는다(I/O 없음). app/services/monitoring/error_events.py 참조.
+  # emit 은 메모리 버퍼에만 넣는다(I/O 없음). agent_arch/services/monitoring/error_events.py 참조.
   error_events:
-    class: app.services.monitoring.error_events.ErrorEventHandler
+    class: agent_arch.services.monitoring.error_events.ErrorEventHandler
     level: WARNING
 
 loggers:
-  app:
+  agent_arch:
     level: DEBUG
-    handlers: [console, file, error_file, error_events]
+    handlers: [console, error_events]
     propagate: false
 
   uvicorn:
     level: INFO
-    handlers: [console]
-    propagate: false
-
-  sqlalchemy:
-    level: WARNING
     handlers: [console]
     propagate: false
 
@@ -71,4 +48,4 @@ loggers:
 
 root:
   level: INFO
-  handlers: [console, file, error_events]
+  handlers: [console, error_events]

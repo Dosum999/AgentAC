@@ -10,7 +10,7 @@ from agent_arch.services.memory_v2 import scenes as S
 
 def test_normalize_name():
     assert S.normalize_name(" 메일 공유 루틴 ") == "메일-공유-루틴"
-    assert S.normalize_name("SCMS_견적/조회!!") == "scms-견적-조회"
+    assert S.normalize_name("PROC_견적/조회!!") == "proc-견적-조회"
     assert S.normalize_name("BATCH_2026") is None
     assert S.normalize_name("주간 요약") is None
     assert S.normalize_name("") is None
@@ -39,7 +39,7 @@ def test_parse_ops_validation_and_mapping():
 
 
 def test_parse_ops_normalizes_latex_arrows():
-    ops = S.parse_ops({"ops": [{"op": "create", "name": "scms", "title": "견적 $\\rightarrow$ 발주", "summary": "A $\\rightarrow$ B", "content": "받은 견적요청 $\\rightarrow$ bidding"}]}, {}, set())
+    ops = S.parse_ops({"ops": [{"op": "create", "name": "proc", "title": "견적 $\\rightarrow$ 발주", "summary": "A $\\rightarrow$ B", "content": "받은 견적요청 $\\rightarrow$ bidding"}]}, {}, set())
     assert ops[0].title == "견적 → 발주" and ops[0].summary == "A → B" and "→" in ops[0].content and "$" not in ops[0].content
 
 
@@ -196,19 +196,19 @@ async def test_repair_rewrites_from_live_evidence_and_deletes_dead_scenes(repair
     """지운 기억을 근거로 쓴 장면: 남은 근거가 있으면 그것만으로 다시 쓰고, 없으면 지운다. 멀쩡한 장면은 그대로."""
     scenes = [
         {"id": "s-dead", "name": "업무-경비-청구", "title": "경비", "summary": "", "content": "닭갈비 28,300원 …", "evidence_atom_ids": ["d1", "d2"]},
-        {"id": "s-part", "name": "scms", "title": "SCMS", "summary": "", "content": "입고 … 점심 …", "evidence_atom_ids": ["k1", "d3"]},
+        {"id": "s-part", "name": "proc", "title": "PROC", "summary": "", "content": "입고 … 점심 …", "evidence_atom_ids": ["k1", "d3"]},
         {"id": "s-ok", "name": "메일", "title": "메일", "summary": "", "content": "…", "evidence_atom_ids": ["old"]},
     ]
     live = {"k1": "k1", "old": "new"}                       # old 는 대체돼 new 로 살아 있다(삭제 아님)
-    atoms = {"k1": {"id": "k1", "atom_type": "episodic", "priority": 50, "content": "SCMS 입고 검사를 문의했다"}}
+    atoms = {"k1": {"id": "k1", "atom_type": "episodic", "priority": 50, "content": "PROC 입고 검사를 문의했다"}}
     repo = _RepairRepo(scenes, live, atoms)
-    invoke = repair_wire(repo, '{"title": "SCMS 입고", "summary": "입고 검사 문의", "content": "SCMS 입고 검사를 문의했다."}')
+    invoke = repair_wire(repo, '{"title": "PROC 입고", "summary": "입고 검사 문의", "content": "PROC 입고 검사를 문의했다."}')
     res = await S.repair_scenes("u1")
     assert ("delete", "s-dead") in repo.calls
     rewrite = next(c for c in repo.calls if c[0] == "rewrite")
     assert rewrite[1] == "s-part" and rewrite[2]["evidence_atom_ids"] == ["k1"]   # 근거는 교체
     assert "점심" not in rewrite[2]["content"]
-    assert "SCMS 입고 검사를 문의했다" in invoke.seen[1].content                  # 남은 atom 만 재료로
+    assert "PROC 입고 검사를 문의했다" in invoke.seen[1].content                  # 남은 atom 만 재료로
     assert not any(c[1] == "s-ok" for c in repo.calls)
     assert (res.rewritten, res.deleted, res.failed) == (1, 1, 0)
 

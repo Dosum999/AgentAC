@@ -218,9 +218,9 @@ def test_newest_period_fact_points_to_freshest_source():
 
 
 def test_links_from_non_web_tools_count_as_known():
-    """SCMS 도구가 준 '바로 가기' 링크는 근거다 — 웹 결과만 보자 지어낸 URL 로 잡아 지우게 했다(실측 2026-10-01)."""
-    calls = [{"id": "g1", "name": "scms_guide", "arguments": {"topic": "입고처리·출고처리 7단계"}}]
-    results = [{"tool_call_id": "g1", "name": "scms_guide",
+    """PROC 도구가 준 '바로 가기' 링크는 근거다 — 웹 결과만 보자 지어낸 URL 로 잡아 지우게 했다(실측 2026-10-01)."""
+    calls = [{"id": "g1", "name": "proc_guide", "arguments": {"topic": "입고처리·출고처리 7단계"}}]
+    results = [{"tool_call_id": "g1", "name": "proc_guide",
                 "content": '{"메뉴": "출고처리", "바로 가기": ["https://procurement.example.com/supplier/logistics"]}'}]
     draft = "[출고처리](https://procurement.example.com/supplier/logistics) 에서 진행하세요. 참고 https://made.up/x"
     f = V.collect_facts(_state(calls, results), draft)

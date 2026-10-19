@@ -172,7 +172,13 @@ async def discover_tools(
             domain=domain,
         )
     except Exception as e:
-        return ToolResult(success=False, output=None, error=f"도구 카탈로그 검색 실패: {e}")
+        # 인덱스가 죽어도 확장이 직접 주는 도메인 도구(extensions.domain_tools)는 돌려줘야 한다.
+        # 그것마저 없으면 아래에서 실패로 끝난다.
+        logger.warning("[tool_search] 도구 카탈로그 검색 실패 domain=%s: %s", domain, e)
+        hits = []
+        search_error = str(e)
+    else:
+        search_error = ""
 
     profile = get_profile_context()
     resolved: List[BaseTool] = []
@@ -205,6 +211,8 @@ async def discover_tools(
 
     _enqueue(resolved)
 
+    if not resolved and search_error:
+        return ToolResult(success=False, output=None, error=f"도구 카탈로그 검색 실패: {search_error}")
     if not resolved:
         if denied_services:
             # 이 영역의 도구가 권한으로 전부 가려진 상태. **요청한 기능이 실제로
@@ -311,20 +319,47 @@ class _DomainToolSearch(BaseTool):
         return await discover_tools(query, self._domain, top_k, exclude_name=self.name)
 
 
+def _register_gateway(domain: str, tool_name: str, intent: str, examples) -> None:
+    cls = type(
+        f"FindTools_{domain}",
+        (_DomainToolSearch,),
+        {
+            "_domain": domain,
+            "_tool_name": tool_name,
+            "_intent": intent,
+            "_examples": tuple(examples),
+        },
+    )
+    register_tool(cls)
+
+
 def _build_domain_search_tools() -> None:
     """도메인별 탐색 도구를 동적 생성·등록한다 (find_messenger_tools 등)."""
     for domain, (tool_name, intent, examples) in _DOMAIN_TOOLS.items():
-        cls = type(
-            f"FindTools_{domain}",
-            (_DomainToolSearch,),
-            {
-                "_domain": domain,
-                "_tool_name": tool_name,
-                "_intent": intent,
-                "_examples": tuple(examples),
-            },
-        )
-        register_tool(cls)
+        _register_gateway(domain, tool_name, intent, examples)
+
+
+# 확장이 등록한 도메인의 도구 이름 접두사 → 도메인. 라우터가 직전 턴 도구에서 도메인을 도출하고,
+# 도메인 귀속 도구를 글로벌 유틸리티로 오인하지 않는 데 쓴다(router._prefix_domain).
+EXTRA_TOOL_PREFIXES: Dict[str, str] = {}
+
+
+def register_domain(domain: str, *, gateway_tool: str, intent: str, examples: List[str],
+                    tool_prefix: Optional[str] = None) -> None:
+    """업무 도메인을 코어 수정 없이 추가한다 — 관문 도구 등록 + 라우터 카드 + 시스템 프롬프트 광고.
+
+    라우터·supervisor·시스템 프롬프트는 이 표(_DOMAIN_TOOLS)를 매번 읽으므로 등록 즉시 반영된다.
+    ``intent`` 는 ``"<라벨> — <세부>"`` 규약(라우터 카드와 사용자 안내 문구가 같이 쓴다).
+    도메인의 실제 도구는 검색 인덱스(동적 API·MCP)나 ``extensions.domain_tools[domain]`` 로 붙는다.
+    """
+    _DOMAIN_TOOLS[domain] = (gateway_tool, intent, list(examples))
+    if tool_prefix:
+        # 접두사가 없으면 이 도메인 도구가 어느 도메인에도 안 속한 글로벌 유틸리티로 보여 모든 워커에 얹힌다.
+        EXTRA_TOOL_PREFIXES[tool_prefix] = domain
+    # 다시 불러도 안전하게(앱을 여러 번 조립하는 테스트·재기동) — 같은 관문은 새 정의로 교체한다.
+    if ToolRegistry.get(gateway_tool) is not None:
+        ToolRegistry.unregister(gateway_tool)
+    _register_gateway(domain, gateway_tool, intent, examples)
 
 
 _build_domain_search_tools()

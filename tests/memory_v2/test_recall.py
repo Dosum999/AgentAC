@@ -87,7 +87,7 @@ def test_system_block_always_has_guide():
 
 
 def test_strip_tool_guidance_keeps_content_drops_tool_pointers():
-    """메모리 도구를 안 물리는 채널(가이드·MES 앱/SCMS)용 — 도구 지시만 걷어낸다.
+    """메모리 도구를 안 물리는 채널(가이드·MES 앱/PROC)용 — 도구 지시만 걷어낸다.
 
     남겨 두면 부를 수 없는 도구를 가리키는 죽은 지시가 된다. 페르소나·전역 지시·장면
     요약은 도구 없이도 유효하므로 살아 있어야 한다.
