@@ -266,7 +266,7 @@ async def _decide(router_llm, user_input: str, confidence_threshold: float,
     # 도메인을 못 정했거나 확신이 낮을 때만 직전 턴이 실행한 도메인들로 채운다(대화 상태 추적의 "이번 턴에 말하지
     # 않았을 때만 이어받기"와 같은 원칙; Dialogflow 컨텍스트·LangGraph supervisor 도 앞 맥락은 매칭 가능성만 높인다).
     # - 채우기가 필요한 이유(2026-09-15): "근거가 뭐야"를 라우터가 talk 로 오분류(0.70)해 워커가 가이드 검색으로 샜다.
-    # - 덮어쓰면 안 되는 이유(2026-09-29 운영 서버 사용자): 웹을 끈 채 물은 턴이 memory 로 처리된 뒤, 웹을 켜고
+    # - 덮어쓰면 안 되는 이유(2026-09-29 실측 사용자): 웹을 끈 채 물은 턴이 memory 로 처리된 뒤, 웹을 켜고
     #   "웹 검색으로 오늘 기준 환율"을 물었는데 라우터 web(0.95~1.00)을 상속이 세 번 연속 memory 로 덮어
     #   메모리 워커가 "웹 검색을 쓸 수 없다"고 답했다. 두 실측의 확신도가 후속 전용 기준(기본 0.85)에서 갈린다.
     if plan is not None and plan.follow_up and not (
@@ -285,7 +285,7 @@ async def _decide(router_llm, user_input: str, confidence_threshold: float,
             logger.info("[supervisor] follow-up → 직전 도메인 상속 %s (router=%s conf=%.2f)",
                         inherit, plan.domains, plan.confidence)
             # 라우터의 웹 조사 계획(검색어·최신성·원 페이지 필요)도 이어받는다 — 버리면 선실행·충분성 루프가 통째로 빠진다
-            # (운영 서버 2026-09-28: 후속 "오늘 유로 기준환율"이 검색 없이 이전 답의 씨티은행 URL 만 열려다 막혔다).
+            # (실측 2026-09-28: 후속 "오늘 유로 기준환율"이 검색 없이 이전 답의 씨티은행 URL 만 열려다 막혔다).
             return RoutePlan(domains=inherit, subqueries=subq, actions=acts, confidence=1.0, follow_up=True,
                              **_web_plan(plan, user_input if "web" in inherit else "")), True
     if plan is not None and plan.domains and plan.confidence >= confidence_threshold:
@@ -356,7 +356,7 @@ def _bound_tools_guidance(tools) -> str:
     """워커에 바인딩된 **retrieved 도구**의 prompt_guidance 를 모아 지침에 덧붙인다.
 
     system 프롬프트의 도구 지침 문단은 core 도구만 싣는다(system._collect_tool_guidance). 그래서 retrieved
-    티어 도구(brave_* 웹 도구 등)의 사용 원칙이 어느 프롬프트에도 들어가지 않았다(dev 실측 2026-09-15: 웹 답변에
+    티어 도구(brave_* 웹 도구 등)의 사용 원칙이 어느 프롬프트에도 들어가지 않았다(실측 2026-09-15: 웹 답변에
     출처 미표기). 워커가 실제로 든 도구의 지침만 붙이므로 프롬프트가 도메인 밖 규칙으로 부풀지 않는다.
     """
     try:
@@ -451,7 +451,7 @@ _DOMAIN_ADDENDA = {
 
 # 사내 데이터 답변용 형식 규칙 — 웹 답에는 해가 된다. "인사이트 도출 의무·인사이트/제안 1줄 이하 금지"가 근거 없는 전망·원인
 # 추정을 채우게 했고, 웹 워커 지침으로 "이 형식보다 우선"이라 덮어써도 gemini 는 ①~④ 구조·인사이트·제안을 계속 붙였다
-# (운영 서버 2026-09-28 "오늘 환율": 묻지 않은 위안·유로·엔 표 + 인사이트 + 제안). 덮어쓰지 말고 웹 워커 프롬프트에서 뺀다.
+# (실측 2026-09-28 "오늘 환율": 묻지 않은 위안·유로·엔 표 + 인사이트 + 제안). 덮어쓰지 말고 웹 워커 프롬프트에서 뺀다.
 _INTERNAL_ANSWER_SECTIONS_RE = re.compile(r"\n## (?:답변 구조|에이전틱 답변 원칙)[^\n]*\n.*?(?=\n## |\Z)", re.S)
 
 
@@ -468,7 +468,7 @@ def _worker_directive(domain: str) -> str:
     가이드 검색 예외(2026-08-31): "휴가 신청 어떻게 해?" 같은 방법·증상 질문도 라우터가
     도메인 워커로 보내는데(주제로는 정분류), 종전 지침의 전면 금지("이 도메인 도구만")가
     글로벌 유틸로 함께 바인딩된 search_user_guide_kb 까지 막아 워커가 가이드 근거 없이
-    실행 인테이크·데이터 추측으로 새는 문제가 dev 실측(guide 골드셋 agent 모드 howto
+    실행 인테이크·데이터 추측으로 새는 문제가 실측(guide 골드셋 agent 모드 howto
     0/12)으로 확인됐다. 격리 원칙은 유지하되 가이드 검색을 조건부 예외로 편입한다 —
     명확한 실행 요청("~해줘")은 종전대로 도메인 도구 직행이라 실행 UX 는 불변.
     """
@@ -856,7 +856,7 @@ _NEWS_FRESHNESS = {"day": "pd", "week": "pw", "month": "pm"}
 def _web_prefetch(plan: RoutePlan, domain: str) -> list:
     """웹 조사 계획(router.web_queries) → 첫 모델 호출 전에 실행할 brave_llm_context 호출들.
 
-    실사용(운영 서버 2026-09-22~23, gemini): 워커가 질문 문장을 그대로 1~2회만 검색해 "7월부터 유가 추이"에 한국 CPI,
+    실사용(실측 2026-09-22~23, gemini): 워커가 질문 문장을 그대로 1~2회만 검색해 "7월부터 유가 추이"에 한국 CPI,
     EPDM·카본블랙 9월 단가는 "찾기 어렵다"로 끝났다(ChatGPT 는 같은 질문에 4~7회). 지침만으로는 여러 질의를 만들지
     않아 범위를 코드가 보장한다. 영문 검색어는 영어권 결과로 보낸다(기본 country=KR·ko 이면 영어 원자료가 밀린다).
     본문 조각은 호출당 4096 토큰 — 셋이 한꺼번에 들어오므로 기본(8192)의 절반.

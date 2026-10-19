@@ -165,7 +165,7 @@ tools:
   # logistics.access 권한 게이트(plan_tools)가 사용자별로 최종 통제한다.
   # 2026-09-03 운영 비노출: 물류 MCP 는 개발기 검증 중이라 운영에서는 관문을 내린다.
   # OFF = core 바인딩 + 기능 안내(system._enabled_domains → DOMAIN_CAPABILITY_BULLETS·
-  # DOMAIN_LABELS)에서 함께 빠진다. 도구 실물은 운영 .env 의 LOGISTICS_MCP_URL/
+  # DOMAIN_LABELS)에서 함께 빠진다. 도구 실물은 배포 설정 의 LOGISTICS_MCP_URL/
   # LOGISTICS_MCP_TOKEN 을 비워 미등록시킨다 — 둘 다 필요하다: env 만 비우면 도구가
   # 0개인데 소개 문구는 남고, 관문만 내리면 UNIFIED_TOOL_INDEXING 의 직접 검색
   # (orchestrator._search_dynamic_tools)이 registry 도구를 그대로 바인딩한다.

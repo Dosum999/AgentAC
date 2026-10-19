@@ -123,7 +123,7 @@ def domain_from_tool_names(names) -> Optional[str]:
 # mattermost_read_file 은 메신저(talk) 도메인 도구라 is_domainless_utility 에서 빠진다. 그런데
 # 첨부 파일 읽기는 메신저 일이 아니라 **요청의 재료를 여는 일**이다 — "이 발주서 수주 등록해줘"
 # 는 물류 워커로 가고, 그 워커가 첨부 PDF 를 못 열면 완수가 물리적으로 불가능하다(2026-10-08
-# 운영 실측: `worker domain=logistics WRITE` → `[executor] tool NOT FOUND: mattermost_read_file`
+# 실측: `worker domain=logistics WRITE` → `[executor] tool NOT FOUND: mattermost_read_file`
 # → "파일을 읽을 수 없으니 품목을 텍스트로 알려 달라"). 모델은 정확히 호출했고 스코프에만 없었다.
 # 읽기 전용이고 권한은 MCP 서버가 요청자 PAT 로 Mattermost 에 강제하므로 얹어도 side-effect 가 없다.
 CROSS_DOMAIN_READERS = frozenset({"mattermost_read_file"})
@@ -178,7 +178,7 @@ class RoutePlan:
     # 추측하지 않고 직전 턴이 실행한 도메인들을 상속한다(라우터 오분류로 워커 울타리에 갇히는 것 방지).
     follow_up: bool = False
     # 웹 조사 계획 — web 도메인일 때 라우터가 함께 내는 검색어(최대 3). 워커가 돌기 전에 코드가 병렬로 먼저 실행한다
-    # (supervisor → react_graph prefetch). 실사용(운영 서버 2026-09-22): 워커 모델이 질문 문장을 그대로 한 번만 검색해
+    # (supervisor → react_graph prefetch). 실사용(실측 2026-09-22): 워커 모델이 질문 문장을 그대로 한 번만 검색해
     # "7월부터 유가 추이"에 브렌트·WTI 대신 한국 소비자물가 기사로 답했다. 지침으로는 여러 질의를 만들지 않았다.
     web_queries: List[str] = field(default_factory=list)
     # 최신성 요구 — "오늘·현재·이번 주·최근" 값을 묻는지(day|week|month, 없으면 ""). 있으면 뉴스 검색을 기간 필터로 1건 더

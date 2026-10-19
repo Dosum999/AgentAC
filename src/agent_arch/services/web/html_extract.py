@@ -12,7 +12,7 @@ from typing import Optional
 
 from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
-try:  # lxml 이 있으면 빠르고 관대한 파서, 없으면 표준 html.parser (컨테이너 이미지에 lxml 이 빠져 있던 dev 실측 2026-09-15)
+try:  # lxml 이 있으면 빠르고 관대한 파서, 없으면 표준 html.parser (컨테이너 이미지에 lxml 이 빠져 있던 실측 2026-09-15)
     import lxml  # noqa: F401
     _PARSER = "lxml"
 except Exception:  # pragma: no cover — 환경 의존

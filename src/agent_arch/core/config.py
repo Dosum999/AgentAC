@@ -460,8 +460,8 @@ class Settings(BaseSettings):
     scms_deal_platform_domains: str = Field(default="example.com", alias="SCMS_DEAL_PLATFORM_DOMAINS")
     scms_deal_partner_domains: str = Field(default="app.example.com", alias="SCMS_DEAL_PARTNER_DOMAINS")
     # 겸직 직원의 메일 도메인 → 그 회사(CSV "도메인=회사"). 계정 소속이 플랫폼이어도 그 회사의 문의방에서 말하면 그 회사로
-    # 본다 — 고객사 A 메일의 회사 직원이 동아 방에 동아 견적을 올리던 실측(정답셋 C05).
-    scms_deal_domain_companies: str = Field(default="고객사 A.kr=(주)고객사 A놀로지",
+    # 본다 — 테넌트 A 메일의 회사 직원이 동아 방에 동아 견적을 올리던 실측(정답셋 C05).
+    scms_deal_domain_companies: str = Field(default="테넌트 A.kr=(주)테넌트 A놀로지",
                                             alias="SCMS_DEAL_DOMAIN_COMPANIES")
     # 메신저 발주요청의 도면 판독 모델(이미지를 읽는 프로바이더). 판독은 스레드 도면을 발주 시점에 직접 읽는다.
     scms_order_drawing_provider: str = Field(default="gemini", alias="SCMS_ORDER_DRAWING_PROVIDER")

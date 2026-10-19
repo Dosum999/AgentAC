@@ -531,7 +531,7 @@ _HISTORY_EVIDENCE_CHARS = 200_000
 def _history_evidence(messages: list) -> str:
     """이번 턴 이전 대화(앞 답·앞 도구 결과·사용자 입력)의 본문. 마지막 메시지(이번 턴 질문)와 system 은 뺀다.
 
-    실측(2026-09-28 운영 서버 vllm 유로): 앞 턴에서 smbs.biz 로 확인한 공식값 1,538.04원을 이번 턴 답에 쓰자, 검증기가
+    실측(2026-09-28 실측 vllm 유로): 앞 턴에서 smbs.biz 로 확인한 공식값 1,538.04원을 이번 턴 답에 쓰자, 검증기가
     "이번 턴 도구 결과에 없다"며 두 번 되돌렸다(고쳐 쓰기 2회, +40초). 앞 턴 근거도 근거다.
     """
     parts = [str(getattr(m, "content", "") or "") for m in (messages or [])[:-1] if getattr(m, "role", None) != "system"]
@@ -541,7 +541,7 @@ def _history_evidence(messages: list) -> str:
 def _remember_history_urls(messages: list) -> None:
     """이 대화의 이전 답변에 나온 URL 은 web_fetch 로 열 수 있게 한다 — 이전 검색에서 나와 사용자에게 이미 보인 주소다.
 
-    실측(운영 서버 2026-09-28): 후속 질의에서 모델이 앞 답의 씨티은행 URL 을 열려다 url_not_seen 으로 막혔고, 그 제약을
+    실측(실측 2026-09-28): 후속 질의에서 모델이 앞 답의 씨티은행 URL 을 열려다 url_not_seen 으로 막혔고, 그 제약을
     사용자에게 그대로 말하며 되물었다. 모델이 지어낸 주소를 막는 원칙과는 충돌하지 않는다(답에 실제로 쓰였던 주소만).
     """
     from agent_arch.agents.context import remember_web_urls, web_search_enabled
@@ -838,7 +838,7 @@ def _name_guard_needed(state: ReactState) -> bool:
 
     웹 검색 결과는 무장 신호에서 뺀다. 가드의 대상은 사내 도구가 작성자를 영문 ID 로만 줄 때의 음차 환각인데, 웹 페이지
     본문의 ``@트위터계정``·이메일이 무장시켜 표 셀 규칙이 "변동률·서비스·지역" 같은 일반 명사를 이름으로 잡고 답 전체에서
-    "이름미확인"으로 바꿨다(운영 서버 실사용 2026-09-23: EPDM 단가표 헤더 "월별 이름미확인"). 대조 근거에는 그대로 남는다.
+    "이름미확인"으로 바꿨다(실측 실사용 2026-09-23: EPDM 단가표 헤더 "월별 이름미확인"). 대조 근거에는 그대로 남는다.
     """
     if not settings.name_answer_guard:
         return False
@@ -1306,7 +1306,7 @@ async def _execute_node(state: ReactState) -> dict:
             logger.info("[react_graph] 현재 채널로 조회 범위 고정: channel_id=%s", origin_channel)
 
     # guide-first 강제 턴: 가이드 검색어는 LLM 의 축약 검색어 대신 질문 문장을 그대로 쓴다.
-    # 운영 실측(2026-09-04): "시급제 연장근무수당 조정" 같은 축약어는 급여 문단만 잡고,
+    # 실측(2026-09-04): "시급제 연장근무수당 조정" 같은 축약어는 급여 문단만 잡고,
     # 질문 문장("07:40 출근 ... 연장 20분 없애는 방법")은 근태 설정 문단을 1위로 잡았다.
     # 턴 원문으로만 강제된 턴은 원문을 검색어로 쓴다(guide_query_text, 2026-10-13) — 도구의 원문
     # 폴백(#577)과 같은 문장이라 중복 제거돼 임베딩이 늘지 않는다.
@@ -1653,7 +1653,7 @@ async def _verify_node(state: ReactState) -> dict:
                 mode, rounds + 1, verdict.get("verdict"), (verdict.get("action") or {}).get("type"),
                 verdict.get("issues"), "revise" if can_revise else "answer")
     # 검증기가 "근거는 결과에 있는데 초안이 어긋난다"(rewrite)를 냈다 → 도구 없이 1회 고쳐 쓰고 끝낸다(라운드와 무관, 재검증 없음).
-    # 실측(2026-09-28): gemini 유로는 2라운드에 rewrite 가 나왔는데 라운드가 없어 틀린 초안이 나갔고, 운영 서버 vllm 유로는
+    # 실측(2026-09-28): gemini 유로는 2라운드에 rewrite 가 나왔는데 라운드가 없어 틀린 초안이 나갔고, 실측 vllm 유로는
     # rewrite → 재작성 → 재검증 rewrite → 고쳐 쓰기로 추론 켠 답을 세 번 써 79초가 걸렸다. 고쳐 쓰기는 한 번이면 된다.
     final_rewrite = (
         mode == _verify.MODE_ON and verdict.get("verdict") == "revise" and a_type == "rewrite"

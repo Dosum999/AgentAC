@@ -132,7 +132,7 @@ async def _run_once(
         if force_persona and fresh_persona:
             # fresh(기억을 지웠거나 모순 update) 는 **모든 범위**의 페르소나를 다시 쓴다. 회상은 회사 범위 본을 먼저
             # 읽는데, 삭제 경로는 범위를 모른 채 예약돼 범위 없는 본만 다시 써졌다 — 회사 범위 본에 지운 규칙이 남아
-            # 계속 적용됐다(실측 2026-09-29 로컬: '— 에이전트 드림' 삭제 뒤에도 테스트 고객사 범위 페르소나 v2 가 그대로).
+            # 계속 적용됐다(실측 2026-09-29 로컬: '— 에이전트 드림' 삭제 뒤에도 테스트 테넌트 범위 페르소나 v2 가 그대로).
             scopes = list(dict.fromkeys([company_scope, *await repo.list_active_persona_scopes(user_sub)]))
             for scope in scopes:
                 out["persona"] = await persona_mod.rebuild_persona(user_sub, fresh=True, company_scope=scope)

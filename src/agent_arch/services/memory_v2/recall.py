@@ -34,7 +34,7 @@ MAX_TURN_CHARS = 1200
 NAV_SCENES = 8
 RRF_K = 60
 # 관련성 하한(튜닝 대상). 한국어 짧은 임베딩은 기본 유사도가 높아 하한 없이 top-k 만 쓰면
-# 무관 기억이 매 턴 딸려온다. dev 실측(gemini-embedding-001, 2026-09-07): 관련 질의 0.70~0.78,
+# 무관 기억이 매 턴 딸려온다. 실측(gemini-embedding-001, 2026-09-07): 관련 질의 0.70~0.78,
 # 무관 질의("매출 보여줘","회의실 예약","안녕") 0.55~0.675 → 0.70 이 경계. 주입은 정밀도 우선이고,
 # 더 깊은 탐색은 에이전트가 memory_search(하한 0.55)로 한다.
 VECTOR_MIN_SCORE = 0.70
@@ -408,7 +408,7 @@ async def invalidate_stable_block(user_sub: str) -> None:
 async def _safe(coro, default, *, name: str, failures: Optional[list] = None):
     """소스 하나를 감싼다. 실패하면 기본값으로 대체하되 **조용히 넘기지 않는다**.
 
-    예전엔 debug 로 남겨 운영 로그에서 한 줄도 안 보였다. 회상은 실패해도 답변이 나가기
+    예전엔 debug 로 남겨 로그에서 한 줄도 안 보였다. 회상은 실패해도 답변이 나가기
     때문에(기억만 빠진 채로) 이 로그가 유일한 단서다 — WARNING 으로 올린다.
 
     Args:

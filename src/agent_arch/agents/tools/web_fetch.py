@@ -27,7 +27,7 @@ from agent_arch.services.web.fetch import DEFAULT_MAX_CHARS, MIN_MAX_CHARS, Fetc
 from agent_arch.services.web.periods import annotate_timezones, latest_period
 
 
-# 원 페이지가 자동 접속을 막았다고 볼 신호. 2026-09-23 운영 서버: web_fetch 17건 중 7건 실패 — apnews(Cloudflare "Just a moment"),
+# 원 페이지가 자동 접속을 막았다고 볼 신호. 2026-09-23 실측 : web_fetch 17건 중 7건 실패 — apnews(Cloudflare "Just a moment"),
 # bloomberg("Are you a robot?") 403, koreaexim 인증서 체인 누락(ConnectError). 헤더를 바꿔도 셋 다 그대로였다(브라우저 헤더·curl 모두 403).
 logger = logging.getLogger(__name__)
 

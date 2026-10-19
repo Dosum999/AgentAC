@@ -29,7 +29,7 @@ def _requires_signature(model: Optional[str]) -> bool:
 def _call_id(fc) -> str:
     """Gemini 가 function_call.id 를 비워 보내면 고유 id 를 만든다.
 
-    예전 폴백 `call_{name}` 은 같은 도구를 한 턴에 여러 번(병렬) 부르면 id 가 겹쳤다(운영 서버 실측 2026-09-22:
+    예전 폴백 `call_{name}` 은 같은 도구를 한 턴에 여러 번(병렬) 부르면 id 가 겹쳤다(실측 2026-09-22:
     brave_llm_context 4건이 모두 `call_brave_llm_context`). Gemini 는 이름·순서로 응답을 맞추지만 우리 코드(검증기 증거
     사실·예산 가드·결과 매칭)는 tool_call_id 로 찾으므로 앞 결과가 뒤 결과에 덮였다. 이름 복원은 `__` 앞부분.
     """

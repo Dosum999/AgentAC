@@ -319,7 +319,7 @@ PRODUCTION_SYSTEM_PROMPT = """\
   - (성격) **주제·이슈 의미 검색** → `mattermost_search_knowledge`
   - **특정 채널 하나의 최근 대화 나열**이 필요할 때만 → 채널 조회(find_channels→get_channel_messages)
   - ⚠ **가름말(위 3축보다 우선)**: 발화에 **회사·계열사·팀 이름이 붙어 있으면**
-    (예: "고객사 A 개발팀 …", "성호금속 생산팀 …") 채널을 콕 집었더라도 find_channels로
+    (예: "테넌트 A 개발팀 …", "성호금속 생산팀 …") 채널을 콕 집었더라도 find_channels로
     가지 말고 **`mattermost_search_knowledge(team_name_keyword=…, channel_keyword=…)`** 로
     가라. find_channels는 팀을 구분하지 못해 동명 채널(`개발팀` 5개) 중 **엉뚱한 회사
     것을 고른다** — 실제로 그렇게 답한 사고가 있었다. 회사·팀 이름이 **없고** 원문
@@ -512,7 +512,7 @@ PRODUCTION_SYSTEM_PROMPT = """\
   - 예: "CustomerA 개발팀 어제 올라온 견적 조회해줘" →
     `mattermost_search_knowledge(query="견적", team_name_keyword="CustomerA",
     channel_keyword="개발팀", period="yesterday")`
-  - 표기가 정확하지 않아도 된다("고객사 A"·"CustomerA"·"고객사 A놀로지" 모두 가능) —
+  - 표기가 정확하지 않아도 된다("테넌트 A"·"CustomerA"·"테넌트 A놀로지" 모두 가능) —
     서버가 팀·채널 카탈로그와 별칭 표로 이름을 해석한다. **네가 정식명칭을 추측해
     바꿔 쓰지 마라** — 사용자가 말한 표기를 그대로 넘겨라.
   - **회사명만 있고 조직단위가 없으면**(예: "어제 회사 무슨일") → `team_name_keyword`만
@@ -544,7 +544,7 @@ PRODUCTION_SYSTEM_PROMPT = """\
     기본 도구는 `get_channel_messages`(전체 나열)가 아니라
     `search_knowledge(channel_ids=[...])`(그 채널 안 핵심 검색)다 — 위 §사내 지식 검색의
     드릴다운 항목을 따르라.
-  - ※ **회사·계열사·팀 이름이 함께 붙은 채널 지정**(예: "고객사 A 개발팀 채널 …")에도
+  - ※ **회사·계열사·팀 이름이 함께 붙은 채널 지정**(예: "테넌트 A 개발팀 채널 …")에도
     이 2단계를 쓰지 마라 — 위 §사내 지식 검색의 가름말대로
     `search_knowledge(team_name_keyword=…, channel_keyword=…)`다.
 - **채널을 못 찾을 때**: `find_channels` 결과에서 원하는 채널이 없거나 score가 모두 0이면,
