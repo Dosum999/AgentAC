@@ -77,6 +77,7 @@ from agent_arch.agents.react.link_policy import TurnLinkPolicy
 from agent_arch.agents.react.messenger_links import apply_file_links, file_refs
 from agent_arch.agents.react.types import LoopResult, ProgressEvent, merge_usage
 from agent_arch.agents.tools.tool_search import drain_discovered_tools, reset_discovered_tools
+from agent_arch.llm.runaway import stop_on_runaway
 from agent_arch.llm.base import Message
 from agent_arch.memory.conversation import COMPACT_SUMMARY_MARKER
 from agent_arch.utils.language import DEFAULT_LANGUAGE, looks_off_target
@@ -762,7 +763,7 @@ async def _call_model_node(state: ReactState) -> dict:
                   or _link_guard_needed(state) or await _glossary_hold(_lang)),
     )
 
-    async for event in llm.stream(state["messages"], **stream_kwargs):
+    async for event in stop_on_runaway(llm.stream(state["messages"], **stream_kwargs)):
         # 체크포인트 b(토큰 단위): break 시 aclose() 가 업스트림 스트림 정리.
         if is_cancelled():
             cancelled = True
@@ -1152,7 +1153,7 @@ async def _forced_none_answer(
     finish = "stop"
     usage = None
     try:
-        async for event in llm.stream(state["messages"], tool_mode="NONE"):
+        async for event in stop_on_runaway(llm.stream(state["messages"], tool_mode="NONE")):
             if event.type == "text":
                 if event.content:
                     text.append(event.content)
@@ -1695,7 +1696,7 @@ async def _rewrite_node(state: ReactState) -> dict:
     usage = None
     try:
         await llm.bind_tools([])
-        async for event in llm.stream(state["messages"], tool_mode="NONE"):
+        async for event in stop_on_runaway(llm.stream(state["messages"], tool_mode="NONE")):
             if event.type == "text" and event.content:
                 text.append(event.content)
             elif event.type == "done":

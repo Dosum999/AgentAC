@@ -17,6 +17,7 @@ import logging
 import time
 from typing import AsyncIterator, List, Optional
 
+from agent_arch.llm.runaway import stop_on_runaway
 from agent_arch.llm.base import BaseLLM, Message, ToolCall
 from agent_arch.agents.react.types import LoopResult, ProgressEvent, merge_usage
 from agent_arch.agents.react.executor import find_tool, serialize_result
@@ -124,7 +125,7 @@ async def guide_loop_events(
         iter_usage = None
 
         t0 = time.monotonic()
-        async for event in llm.stream(messages, tool_mode=tool_mode):
+        async for event in stop_on_runaway(llm.stream(messages, tool_mode=tool_mode)):
             # 사용자 중단 (체크포인트 b — 토큰 단위): 업스트림 스트림을 정리하며 빠져나온다.
             if is_cancelled():
                 break
@@ -153,7 +154,7 @@ async def guide_loop_events(
             retry_text: list[str] = []
             retry_finish = "stop"
             retry_usage = None
-            async for event in llm.stream(messages, tool_mode="NONE"):
+            async for event in stop_on_runaway(llm.stream(messages, tool_mode="NONE")):
                 if is_cancelled():
                     break
                 if event.type == "text":
@@ -226,7 +227,7 @@ async def guide_loop_events(
         forced_text: list[str] = []
         forced_finish = "stop"
         forced_usage = None
-        async for event in llm.stream(messages, tool_mode="NONE"):
+        async for event in stop_on_runaway(llm.stream(messages, tool_mode="NONE")):
             if is_cancelled():
                 break
             if event.type == "text":

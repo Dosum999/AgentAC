@@ -403,7 +403,8 @@ flowchart TD
 - 자동 함수 호출(AFC)을 끈다. SDK 가 자체 멀티턴 루프를 돌며 수동 ReAct 와 충돌한다(`llm/gemini.py`).
 - 다른 프로바이더가 만든 functionCall 을 재생하면 thought_signature 검증으로 400 이 난다. `thinking_budget=0` 이나 AFC off 로도 **우회되지 않는다**(실측). 해법은 tool_call/result 를 평문으로 펼치는 것뿐이다(`orchestrator.py:_flatten_tool_messages_for_replay`).
 - 스키마 무결성에 엄격하다(4.7). 중간 system 메시지는 앞으로 호이스팅된다(9절).
-- **반복 붕괴**: 표 구분선 `-` 를 max_tokens 까지 반복한 사례가 있다(최대 13만 자). 판별은 크기 산술로 한다. `-` 런은 16자/토큰이라, max_tokens 1024 레인으로는 13만 자가 불가능하다. 스트림 단계 런어웨이 감지는 아직 없다(14절).
+- **반복 붕괴**: 표 구분선 `-` 를 max_tokens 까지 반복한 사례가 있다(최대 13만 자). 판별은 크기 산술로 한다. `-` 런은 16자/토큰이라, max_tokens 1024 레인으로는 13만 자가 불가능하다.
+  - **규칙**: 스트림을 소비하는 모든 자리에서 꼬리가 짧은 주기(40자 이하)로 1,500자 넘게 반복되면 업스트림을 닫고 `finish_reason="repetition"` 으로 끝낸다. 사후 trim 만으로는 그때까지 토큰 비용을 다 내고 화면에도 다 흘린 뒤다(`llm/runaway.py:stop_on_runaway`).
 
 **vLLM(자체 서빙)**
 - 도구 호출이 structured 가 아니라 평문(`call:NAME{...}`)으로 새어 화면에 노출됐다. 서버 tool/reasoning 파서를 맞춰 업그레이드해 해소했다. 백엔드에도 안전망을 둔다(`llm/vllm.py:_ToolCallLeakGuard`). 텍스트 스트림 앞부분을 버퍼링해 누출을 화면에서 억제하고, 가능하면 ToolCall 로 복구한다. 복구된 호출도 승인이 필요하면 HITL 카드로 간다.
@@ -451,7 +452,7 @@ flowchart TD
 
 **확인된 결함(미수정)**
 - 첨부 평문이 질문 앞에 붙은 채 이력에 영구 저장된다. 라우터·회상·메모리 추출이 첨부를 사용자 발화로 본다.
-- 스트림 단계 반복 붕괴 감지가 없다. Gemini 런타임 503 → 다른 프로바이더 폴백이 없다(503 은 빈 응답으로 끝남).
+- Gemini 런타임 503 → 다른 프로바이더 폴백이 없다(503 은 빈 응답으로 끝남).
 - 재압축 요약이 이전 요약 내용을 버린다. 그러면 모델이 요약에도 원문에도 없는 사실을 지어낸다.
 
 **이 레포에서 고친 결함**
@@ -462,6 +463,7 @@ flowchart TD
 - 강제 답변 경로(max_iterations 소진·malformed)에 반복 접기·길이 상한이 없던 것 → 최종 답변 노드와 같은 `_bound_answer` 를 거친다.
 - last_route 를 답 전에 저장하고 새 대화 첫 턴에는 못 남기던 것 → 답 저장 때 확정 대화 id 로 저장(`memory/conversation.begin_turn_route/record_turn_route`).
 - 도구 없는 턴을 지나도 tool_ctx 가 최신 질문 뒤에 붙던 것 → 결과를 만든 턴(anchor) 뒤에 붙이고, 그 턴이 이력에서 빠졌으면 주입하지 않는다. 도구 없는 턴이 2번을 넘으면 버린다(`TOOL_CTX_MAX_IDLE_TURNS`).
+- 스트림 단계 반복 붕괴 감지가 없던 것 → `llm/runaway.stop_on_runaway` 로 그래프·루프·가이드 루프의 모든 스트림 소비 지점을 감쌌다.
 - 압축 중 append 가 ltrim 으로 길이가 그대로면 새 턴을 잃던 것 → 요약한 앞쪽만 Lua 로 원자 교체(`redis_store.replace_prefix`), 앞쪽이 바뀌었으면 이번 압축 취소.
 
 **실험 단계에서 검증했으나 이 레포 코드에는 없는 설계** (같은 결함들의 해법 후보)

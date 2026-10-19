@@ -35,6 +35,7 @@ import time
 from typing import AsyncIterator, Awaitable, Callable, List
 
 from agent_arch.core.config import settings
+from agent_arch.llm.runaway import stop_on_runaway
 from agent_arch.llm.base import BaseLLM, Message, ToolCall
 from agent_arch.agents.hitl.policy import requires_approval
 from agent_arch.agents.react.types import LoopResult, ProgressEvent, merge_usage
@@ -209,7 +210,7 @@ async def react_loop_events(
         t0 = time.monotonic()
         pinned = pick_author_tool(input, known_tool_names) if iteration == 0 else None
         stream_options = {"tool_mode": "ANY", "allowed_tools": [pinned]} if pinned else {"tool_mode": tool_mode}
-        async for event in llm.stream(messages, **stream_options):
+        async for event in stop_on_runaway(llm.stream(messages, **stream_options)):
             # 사용자 중단 (체크포인트 b — 토큰 단위): break 시 async gen aclose() 가
             # GeneratorExit 를 주입해 업스트림 LLM 스트림(httpx)이 정리된다.
             if is_cancelled():
@@ -246,7 +247,7 @@ async def react_loop_events(
             retry_finish = "stop"
             retry_usage = None
             try:
-                async for event in llm.stream(messages, tool_mode="NONE"):
+                async for event in stop_on_runaway(llm.stream(messages, tool_mode="NONE")):
                     if event.type == "text":
                         if event.content:
                             retry_text.append(event.content)
@@ -470,7 +471,7 @@ async def react_loop_events(
     forced_text: list[str] = []
     forced_finish = "stop"
     forced_usage = None
-    async for event in llm.stream(messages, tool_mode="NONE"):
+    async for event in stop_on_runaway(llm.stream(messages, tool_mode="NONE")):
         if event.type == "text":
             if event.content:
                 forced_text.append(event.content)
