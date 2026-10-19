@@ -323,6 +323,20 @@ def get_turn_input() -> str:
     return _turn_input.get() or ""
 
 
+# 이번 턴에 사용자가 **직접 쓴 질문**. 첨부 본문(표·문서 평문)이 입력 앞에 붙는 턴에서만 입력과 다르다.
+# 모델에는 첨부까지 붙은 원문을 그대로 주고, 제목·라우터·압축 질문 목록·장기 메모리는 이 값을 쓴다 —
+# 안 그러면 첨부가 사용자 발화로 읽혀 기억·라우팅을 오염시킨다.
+_turn_question: ContextVar[Optional[str]] = ContextVar("turn_question", default=None)
+
+
+def set_turn_question(text: Optional[str]) -> None:
+    _turn_question.set(text)
+
+
+def get_turn_question() -> Optional[str]:
+    return _turn_question.get()
+
+
 # 이번 턴 식별자 — 도구가 "이 값을 사용자에게 물었다"를 기록할 때, 그 뒤에 사용자 턴이 실제로 있었는지 가르는 기준.
 # 같은 턴 안에서 모델이 묻지 않고 같은 호출을 되풀이하면 '물었다'가 성립하지 않는다(2026-09-28 운영: 대상자 미수집
 # 응답 뒤 같은 인자로 재호출 → '물었음'으로 통과해 대상자 없는 초안). 설정 안 된 경로(승인 재개 등)는 None.

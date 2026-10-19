@@ -52,6 +52,7 @@ from agent_arch.agents.context import (
     get_thread_context,
     set_turn_id,
     set_turn_input,
+    set_turn_question,
     set_user_context,
     set_withheld_tools,
     withheld_tools,
@@ -1035,6 +1036,8 @@ class AgentOrchestrator:
         set_profile_context(profile)
         # 발화 원문 — 도구가 인자에서 떨어진 정보를 되찾는 데 쓴다(회사 토큰 등). 주입 전 raw.
         set_turn_input(input)
+        # 첨부 본문이 입력에 붙은 턴이면 엔드포인트가 사용자 질문만 따로 둔다(agents/context.set_turn_question).
+        set_turn_question(getattr(self, "turn_question", None))
         set_turn_id(uuid.uuid4().hex)   # 도구의 "물었다" 기록이 같은 턴 재호출과 실제 사용자 답을 가르는 기준
         reset_company_requests()     # 도구(자식 태스크)가 제자리 수정할 기록 dict 를 부모가 만든다
 

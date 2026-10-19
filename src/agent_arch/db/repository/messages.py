@@ -96,7 +96,7 @@ async def save_turn(
             logger.error("save_turn: conversation_id와 user_id가 모두 비어 lazy-create 불가")
             return None, None
         conversation_id = await create_conversation(
-            user_sub=user_id, title=derive_conversation_title(user_input)
+            user_sub=user_id, title=derive_conversation_title((metadata or {}).get("question") or user_input)
         )
         if conversation_id is None:
             logger.error("save_turn: lazy-create 실패 — DB 풀 None 또는 INSERT 실패")
@@ -357,7 +357,7 @@ async def fetch_recent_turns(
         since: 이 시각 이후 턴만(맥락 비움 워터마크). None 이면 전체.
 
     Returns:
-        ``[{"query", "answer", "created_at"}, ...]`` 오래된 순. 풀 미초기화면 [].
+        ``[{"query", "answer", "created_at", "question"}, ...]`` 오래된 순(question 은 첨부 턴만). 풀 미초기화면 [].
     """
     pool = db_pool.get_pool()
     if pool is None or not conversation_id or not user_sub:
@@ -369,9 +369,9 @@ async def fetch_recent_turns(
         since_clause = f"AND m.created_at > ${len(params)}"
     rows = await pool.fetch(
         f"""
-        SELECT m.query, m.answer, m.created_at
+        SELECT m.query, m.answer, m.created_at, m.question
           FROM (
-                SELECT m.query, m.answer, m.created_at, m.id
+                SELECT m.query, m.answer, m.created_at, m.id, m.metadata->>'question' AS question
                   FROM agent.messages m
                   JOIN agent.conversations c ON c.id = m.conversation_id
                  WHERE m.conversation_id = $1::uuid

@@ -24,6 +24,8 @@ class Message(BaseModel):
     name: Optional[str] = None
     tool_calls: Optional[List[Dict[str, Any]]] = None
     tool_call_id: Optional[str] = None
+    # user 메시지: 사용자가 직접 쓴 질문(첨부 본문이 content 앞에 붙은 턴에서만). 프로바이더로는 보내지 않는다.
+    question: Optional[str] = None
 
 
 class ToolCall(BaseModel):

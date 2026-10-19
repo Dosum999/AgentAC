@@ -79,7 +79,7 @@ def _question_lines(old_messages: List[Message], previous: List[str]) -> List[st
     for m in old_messages:
         if m.role != "user":
             continue
-        text = " ".join((m.content or "").split())
+        text = " ".join((getattr(m, "question", None) or m.content or "").split())
         if text:
             qs.append(text[:MAX_QUESTION_CHARS])
     return qs[-MAX_QUESTIONS:]

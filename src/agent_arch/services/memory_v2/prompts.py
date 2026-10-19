@@ -185,13 +185,15 @@ def format_turn(
     """
     conv = str(msg.get("conversation_id") or "")[:8]
     lines = [f"[{tag}] 대화방 {conv} · {_fmt_ts(msg.get('created_at'))}"]
-    lines.append(f"사용자: {str(msg.get('query') or '').strip()[:max_query]}")
     metadata = msg.get("metadata") or {}
     if isinstance(metadata, str):
         try:
             metadata = json.loads(metadata)
         except (ValueError, TypeError):
             metadata = {}
+    # 첨부가 붙은 턴은 사용자가 직접 쓴 질문만 증거로 본다(첨부 본문은 사용자 발화가 아니다).
+    said = (metadata.get("question") if isinstance(metadata, dict) else None) or msg.get("query") or ""
+    lines.append(f"사용자: {str(said).strip()[:max_query]}")
     digest = metadata.get("tool_digest") if isinstance(metadata, dict) else None
     if digest:
         digest, excerpt_rows = _split_excerpt(digest)

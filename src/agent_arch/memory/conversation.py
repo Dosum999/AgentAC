@@ -1157,7 +1157,10 @@ async def _hydrate_history(key: str, conversation_id: str, user_sub: str) -> Lis
             a = str(t.get("answer") or "").strip()
             if not (q and a):          # 반쪽 턴은 통째로 뺀다(역할 교대 보존)
                 continue
-            raw += [{"role": "user", "content": q}, {"role": "assistant", "content": a}]
+            user = {"role": "user", "content": q}
+            if t.get("question"):
+                user["question"] = t["question"]
+            raw += [user, {"role": "assistant", "content": a}]
         if not raw:
             return []
 
@@ -1294,6 +1297,7 @@ async def append_turn(
     user_sub: Optional[str] = None,
     tool_calls: Optional[List[dict]] = None,
     tool_results: Optional[List[dict]] = None,
+    question: Optional[str] = None,
 ) -> None:
     """대화 LIST에 RPUSH한다. 트림·TTL은 사용자 preferences 기반(없으면 전역 폴백).
 
@@ -1326,9 +1330,12 @@ async def append_turn(
         max_history = MAX_HISTORY
         ttl = SESSION_TTL
 
+    user_msg = {"role": "user", "content": user_input}
+    if question:
+        user_msg["question"] = question  # Message.question — 프로바이더로는 안 간다
     await redis_store.rpush(
         key,
-        {"role": "user", "content": user_input},
+        user_msg,
         {"role": "assistant", "content": assistant_output},
     )
     await redis_store.ltrim(key, -max_history, -1)
@@ -1525,6 +1532,16 @@ def memory_capture_skip_reason(
     return None
 
 
+def turn_question_for(user_input: str) -> Optional[str]:
+    """이번 턴에 사용자가 직접 쓴 질문 — 입력과 다르고 입력 안에 들어 있을 때만(첨부가 앞에 붙은 턴)."""
+    from agent_arch.agents.context import get_turn_question
+
+    q = (get_turn_question() or "").strip()
+    if not q or q == (user_input or "").strip() or q not in (user_input or ""):
+        return None
+    return q
+
+
 async def save_logged_in_turn(
     conversation_id: Optional[str],
     user_sub: str,
@@ -1667,6 +1684,11 @@ async def save_logged_in_turn(
                     metadata = {**(metadata or {}), "tool_digest": digest}
         except Exception:
             logger.debug("메모리 v2 tool_digest 생성 실패(무시)", exc_info=True)
+    # 첨부 본문이 입력에 붙은 턴이면 사용자가 직접 쓴 질문을 따로 싣는다. 모델 원문(query·이력 content)은
+    # 그대로 두고, 제목·라우터·압축 질문 목록·장기 메모리 추출이 이 값을 쓴다.
+    question = turn_question_for(user_input)
+    if question:
+        metadata = {**(metadata or {}), "question": question}
     try:
         message_id, conv_id = await pg_save_turn(
             conversation_id=conversation_id,
@@ -1706,6 +1728,7 @@ async def save_logged_in_turn(
                 user_sub=user_sub,
                 tool_calls=tool_calls,
                 tool_results=tool_results,
+                question=question,
             )
         except Exception:
             logger.error(
@@ -1725,7 +1748,7 @@ async def save_logged_in_turn(
     if message_id and conv_id and not pos_internal and not capture_skip:
         try:
             from agent_arch.services.memory_v2 import on_turn_saved as _memory_v2_capture
-            _memory_v2_capture(user_sub, message_id, user_input)
+            _memory_v2_capture(user_sub, message_id, question or user_input)
         except Exception:
             logger.error("메모리 v2 캡처 트리거 실패 (conv_id=%s)", conv_id, exc_info=True)
 

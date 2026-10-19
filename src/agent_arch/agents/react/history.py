@@ -24,6 +24,8 @@ def recent_history(messages: Any, *, max_turns: int = DEFAULT_TURNS, max_chars: 
     for m in messages or []:
         role = getattr(m, "role", None)
         content = getattr(m, "content", "") or ""
+        if role == "user" and getattr(m, "question", None):
+            content = m.question  # 첨부가 붙은 턴은 사용자가 직접 쓴 질문만 본다
         if role not in ("user", "assistant"):
             continue
         if getattr(m, "name", None) == FEEDBACK_NAME:
@@ -51,6 +53,8 @@ def recent_user_turns(messages: Any, *, max_turns: int = DEFAULT_TURNS, max_char
     for m in messages or []:
         role = getattr(m, "role", None)
         content = getattr(m, "content", "") or ""
+        if role == "user" and getattr(m, "question", None):
+            content = m.question  # 첨부가 붙은 턴은 사용자가 직접 쓴 질문만 본다
         if role not in ("user", "assistant") or getattr(m, "name", None) == FEEDBACK_NAME:
             continue
         if getattr(m, "tool_calls", None) or (role == "user" and content.startswith(_TOOL_CTX_PREFIX)):
