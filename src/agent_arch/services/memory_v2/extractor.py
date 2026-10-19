@@ -39,7 +39,7 @@ SOR_MARKERS: tuple[str, ...] = (
     "권한", "소속", "내 회사", "우리 회사", "드라이브", "나는 누구",
 )
 # 봇 자칭·시스템 문구가 사용자 속성으로 둔갑한 경우(실측: 프로필 별칭 "에이전트").
-BOT_SELF_MARKERS: tuple[str, ...] = ("에이전트", "datbi", "어시스턴트는", "에이전트는")
+BOT_SELF_MARKERS: tuple[str, ...] = ("에이전트", "agent", "어시스턴트는", "에이전트는")
 
 _MAX_SCENE_CHARS = 60
 

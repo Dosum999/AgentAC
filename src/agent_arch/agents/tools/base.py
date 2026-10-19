@@ -3,7 +3,6 @@ from typing import Dict, Any, List, Optional, ClassVar
 from pydantic import BaseModel
 from langsmith import traceable
 from agent_arch.agents.permissions.spec import PermissionRequirement
-from agent_arch.core.config import settings
 
 
 class ToolResult(BaseModel):
@@ -116,7 +115,7 @@ class BaseTool(ABC):
 
     @traceable(run_type="tool")
     async def execute(self, **kwargs) -> ToolResult:
-        """도구를 실행한다. 설정된 모드에 따라 데모 또는 실제 실행을 위임한다.
+        """도구를 실행한다.
 
         Args:
             **kwargs: 도구 파라미터
@@ -124,21 +123,7 @@ class BaseTool(ABC):
         Returns:
             ToolResult: 실행 결과
         """
-        if settings.demo_mode:
-            return await self._demo_execute(**kwargs)
         return await self._real_execute(**kwargs)
-
-    @abstractmethod
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        """데모 모드 실행 - 모의 데이터를 반환한다.
-
-        Args:
-            **kwargs: 도구 파라미터
-
-        Returns:
-            ToolResult: 모의 실행 결과
-        """
-        pass
 
     async def _real_execute(self, **kwargs) -> ToolResult:
         """실제 모드 실행 - 실제 외부 API를 호출한다.

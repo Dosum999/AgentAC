@@ -53,7 +53,7 @@ from agent_arch.services.api_registry.models import ExternalToolDef
 def _make_def(
     tool_name: str,
     *,
-    external_service: str | None = "logistics_service",
+    external_service: str | None = "hr_service",
     http_method: str = "GET",
     required_permissions: dict | None = None,
 ) -> ExternalToolDef:
@@ -88,19 +88,19 @@ def test_required_permissions_registered_as_is():
     """tool_def에 required_permissions가 있으면 그대로 등록."""
     DynamicAPITool(
         _make_def(
-            "logistics_service_inventory_get_one",
+            "hr_service_inventory_get_one",
             required_permissions={
-                "service": "logistics",
+                "service": "hr",
                 "mode": "permission",
-                "permissions_all": ["logistics.inventory_view"],
+                "permissions_all": ["hr.inventory_view"],
             },
         )
     )
-    req = permission_index.get("logistics_service_inventory_get_one")
+    req = permission_index.get("hr_service_inventory_get_one")
     assert req is not None
     assert req.mode == GateMode.PERMISSION
-    assert req.service == "logistics"
-    assert req.permissions_all == ("logistics.inventory_view",)
+    assert req.service == "hr"
+    assert req.permissions_all == ("hr.inventory_view",)
 
 
 def test_required_permissions_access_only_mode():
@@ -120,17 +120,12 @@ def test_required_permissions_access_only_mode():
 # ── required_permissions 없을 때 fallback ──────────────────────────────────
 
 def test_fallback_access_only_from_external_service():
-    """required_permissions 없으면 external_service로 ACCESS_ONLY fallback.
-
-    logistics_service 는 전용 도메인 "mespoc" 에 매핑된다(SERVICE_ALIAS, 2026-08-24).
-    폴백은 ACCESS_ONLY 하드코딩 — mespoc.access 는 없는 키라 전원 deny(fail-safe,
-    231건 전부 명시 메타 보유라 실경로 없음).
-    """
-    DynamicAPITool(_make_def("mespoc_service_new_tool", external_service="logistics_service"))
-    req = permission_index.get("mespoc_service_new_tool")
+    """required_permissions 없으면 external_service로 ACCESS_ONLY fallback(서비스 키는 SERVICE_ALIAS 로 정규화)."""
+    DynamicAPITool(_make_def("hr_service_new_tool", external_service="hr_service"))
+    req = permission_index.get("hr_service_new_tool")
     assert req is not None
     assert req.mode == GateMode.ACCESS_ONLY
-    assert req.service == "mespoc"
+    assert req.service == "hr"
 
 
 def test_fallback_normalizes_service_alias():
@@ -168,14 +163,14 @@ def test_malformed_required_permissions_falls_back():
     """required_permissions 파싱 실패 → external_service fallback으로 진행."""
     DynamicAPITool(
         _make_def(
-            "logistics_service_bad_meta",
+            "hr_service_bad_meta",
             required_permissions={"mode": "permission"},  # service 키 누락
         )
     )
-    req = permission_index.get("logistics_service_bad_meta")
+    req = permission_index.get("hr_service_bad_meta")
     assert req is not None
     assert req.mode == GateMode.ACCESS_ONLY  # fallback
-    assert req.service == "mespoc"  # logistics_service → "mespoc" (2026-08-24 PUBLIC 전환·도메인 이전)
+    assert req.service == "hr"  # hr_service → "hr"
 
 
 def test_malformed_meta_no_external_service_not_registered():

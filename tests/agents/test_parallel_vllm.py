@@ -446,7 +446,6 @@ class TestRunParallelTrigger:
              patch("agent_arch.agents.orchestrator.get_current_run_tree", return_value=None), \
              patch("agent_arch.agents.orchestrator.save_logged_in_turn", new=AsyncMock(return_value=("msg-id", "conv-id"))):
 
-            mock_settings.demo_mode = True
             mock_settings.enable_pii_masking = False
             mock_settings.enable_parallel_eval = True
 
@@ -483,7 +482,6 @@ class TestStreamParallelTrigger:
              patch("agent_arch.agents.orchestrator.get_current_run_tree", return_value=None), \
              patch("agent_arch.agents.orchestrator.save_logged_in_turn", new=AsyncMock(return_value=("msg-id", "conv-id"))):
 
-            mock_settings.demo_mode = True
             mock_settings.enable_pii_masking = False
             mock_settings.enable_parallel_eval = True
 
@@ -515,7 +513,6 @@ class TestStreamParallelTrigger:
              patch("agent_arch.agents.orchestrator.get_current_run_tree", return_value=None), \
              patch("agent_arch.agents.orchestrator.save_logged_in_turn", new=AsyncMock(return_value=("msg-id", "conv-id"))):
 
-            mock_settings.demo_mode = True
             mock_settings.enable_pii_masking = False
             mock_settings.enable_parallel_eval = True
 

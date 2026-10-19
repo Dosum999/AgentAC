@@ -200,7 +200,7 @@ async def execute_tools(
             result = await tool.execute(**tc.arguments)
         except TypeError as e:
             # 모델이 스키마를 어겨 인자를 빠뜨리거나 형을 틀린 경우다(실측 2026-09-23:
-            # eapproval_create_document 를 title 없이 불러 TypeError → 턴 전체가 죽고
+            # 문서 상신 도구를 title 없이 불러 TypeError → 턴 전체가 죽고
             # "답변을 생성하지 못했습니다"가 나갔다). 무엇이 잘못됐는지 돌려주면 모델이
             # 다음 호출에서 채운다 — 이 함수의 계약이 원래 그렇다(docstring).
             logger.warning("[executor] tool ARG ERROR name=%s: %s", tc.name, e)

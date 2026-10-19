@@ -125,13 +125,13 @@ async def test_save_binds_to_the_current_window(env, monkeypatch):
     """
     from agent_arch.agents import context as C
 
-    C.set_user_context({"sub": "u1", "memory_surface": "mes"})
+    C.set_user_context({"sub": "u1", "memory_surface": "app"})
     try:
         await explicit.save_explicit_atom("u1", "앞으로 수량은 천 단위로 끊어 보여줘")
     finally:
         C.set_user_context({})
 
-    assert env["judge"][0][0].places == ["agent:mes"]
+    assert env["judge"][0][0].places == ["agent:app"]
 
 
 @pytest.mark.asyncio

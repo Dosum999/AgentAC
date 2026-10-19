@@ -117,14 +117,6 @@ class RemoteMCPTool(BaseTool):
                  if k not in self._hidden and v is not None and _enum_ok(self._parameters.get(k), v)}
         return {**self._default_args, **given, **self._forced_args}
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(
-            success=True,
-            output={
-                "message": f"[DEMO] {self._name} 호출 (MCP 서버 미연동 모의 응답)",
-                "params": kwargs,
-            },
-        )
 
     async def _real_execute(self, **kwargs) -> ToolResult:
         user_ctx = get_user_context() or {}

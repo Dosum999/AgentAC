@@ -3,7 +3,7 @@
 세 가지를 결정적으로 처리한다 (모두 `sanitize_tool_names` 한 곳을 거치므로
 스트리밍/최종 경로 모두 자동 적용):
 
-1) **내부 도구 이름 마스킹** — `mespoc_service_list_defective_*_53aeef98`
+1) **내부 도구 이름 마스킹** — `hr_service_list_assets_53aeef98`
    같은 내부 함수명이 본문에 누출되는 것을 차단.
     1차: 화이트리스트 alternation — 실제 도구명(동적 API + 정적 스킬 + MCP +
          tools_config.yaml)을 escape하여 OR 결합한 정규식. 100% 정확.
@@ -822,7 +822,7 @@ class StreamSanitizer:
     Examples:
         >>> s = StreamSanitizer()
         >>> out = []
-        >>> for chunk in ["앞서 logist", "ics_service_", "list_assets로 조회"]:
+        >>> for chunk in ["앞서 hr_se", "rvice_", "list_assets로 조회"]:
         ...     out.append(s.feed(chunk))
         >>> out.append(s.flush())
         >>> "".join(out)

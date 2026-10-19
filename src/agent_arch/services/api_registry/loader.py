@@ -54,7 +54,7 @@ class ToolLoader:
             if isinstance(schema, str):
                 item["parameters_schema"] = json.loads(schema)
 
-            # 도메인 = 정규화된 서비스 키 (예: logistics_service → logistics)
+            # 도메인 = 정규화된 서비스 키 (예: hr_service → hr)
             if item.get("external_service") and not item.get("domain"):
                 item["domain"] = normalize_service(item["external_service"])
 
@@ -73,7 +73,7 @@ class ToolLoader:
         첫 호출 시 load_from_json()으로 캐시를 초기화한다 (get_by_name과 동일).
 
         Args:
-            domain: 정규화된 서비스 키 (예: "mespoc"). ``normalize_service`` 결과와
+            domain: 정규화된 서비스 키 (예: "hr"). ``normalize_service`` 결과와
                 같은 체계이며 ``ExternalToolDef.domain`` 과 비교된다.
 
         Returns:

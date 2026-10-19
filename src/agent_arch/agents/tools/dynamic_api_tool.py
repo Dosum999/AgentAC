@@ -179,22 +179,6 @@ class DynamicAPITool(BaseTool):
 
     # ── 실행 메서드 ─────────────────────────────────────────────────────────
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        """데모 모드 실행 - 모의 데이터를 반환한다.
-
-        Args:
-            **kwargs: 도구 파라미터
-
-        Returns:
-            ToolResult: 모의 실행 결과
-        """
-        return ToolResult(
-            success=True,
-            output={
-                "message": f"[DEMO] {self._def.tool_name}",
-                "params": kwargs,
-            },
-        )
 
     @staticmethod
     def _header_value(value: str) -> str:
@@ -246,16 +230,6 @@ class DynamicAPITool(BaseTool):
                 logger.debug("[DynamicAPITool] auth=session_id for HR service")
             else:
                 logger.warning("[DynamicAPITool] auth=NONE for HR service - no session_id")
-        elif self._def.external_service == "logistics_service":
-            # Logistics 서비스: session_id 쿠키 + X-Tenant-ID 방식
-            if session_id := ctx.get("session_id"):
-                cookies[settings.session_cookie_name] = session_id
-                logger.debug("[DynamicAPITool] auth=session_id for Logistics service")
-            else:
-                logger.warning("[DynamicAPITool] auth=NONE for Logistics service - no session_id")
-            # 사용자 컨텍스트의 회사를 우선 사용, 없으면 환경변수 fallback
-            tenant = ctx.get("company") or settings.logistics_tenant_id
-            headers["X-Tenant-ID"] = self._header_value(tenant)
         else:
             # 기타 서비스: fallback 로직
             if session_id := ctx.get("session_id"):
@@ -284,11 +258,7 @@ class DynamicAPITool(BaseTool):
                     url = self._resolve_path(url, dict(kwargs))
                     path_vars = set(re.findall(r"\{(\w+)\}", self._def.endpoint_path))
                     body_params = {k: v for k, v in kwargs.items() if k not in path_vars}
-                    # Logistics는 body를 직접 전달 ({"data": ...} 래퍼 불필요)
-                    if self._def.external_service == "logistics_service":
-                        json_body = body_params
-                    else:
-                        json_body = {"data": body_params}
+                    json_body = {"data": body_params}
                     resp = await client.request(
                         method, url, headers=headers, json=json_body, cookies=cookies
                     )

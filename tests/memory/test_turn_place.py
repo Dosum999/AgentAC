@@ -113,8 +113,8 @@ def test_app_surface_turn_records_its_window():
     """MES 앱 창(채팅·음성) 턴은 창 이름을 자리로 남긴다 — origin 이 없어도."""
     from agent_arch.memory.conversation import turn_place
 
-    assert turn_place({"memory_surface": "mes"}) == {
-        "provider": "agent", "channel_id": "mes", "is_dm": False,
+    assert turn_place({"memory_surface": "app"}) == {
+        "provider": "agent", "channel_id": "app", "is_dm": False,
     }
 
 

@@ -4,13 +4,13 @@
 도메인이 코어에 끼어들어야 하는 자리는 전부 여기 슬롯으로 열려 있고, 앱 조립부(composition root)가
 기동 시 채운다. 슬롯이 비어 있으면 코어는 "그 기능 없음"으로 결정적으로 동작한다(fail-closed).
 
-코어가 업무 도메인(구매·물류·예약)·용어 사전 출처·사내 디렉터리 모듈을 직접 import 하면, 도메인을 하나
+코어가 업무 도메인(구매·물류·예약 등)·용어 사전 출처·사내 디렉터리 모듈을 직접 import 하면, 도메인을 하나
 끌 때마다 코어 4곳을 함께 고쳐야 한다. 그래서 이 자리들을 슬롯으로 둔다.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, Optional, Set, Tuple
 
 
 # (tool_name, kwargs) -> (해석된 kwargs, settled). settled 가 None 이 아니면(모호·미존재) 그 ToolResult 를
@@ -28,6 +28,16 @@ class Extensions:
     domain_available: Dict[str, Callable[[], bool]] = field(default_factory=dict)
     # 도구 이름 -> 승인 후 후처리 훅.
     post_approval: Dict[str, PostApprovalHook] = field(default_factory=dict)
+    # 업무 도메인의 비가역 쓰기 도구 — 코어 승인 목록(hitl/policy)에 더해 사람 승인을 강제한다.
+    approval_required: Set[str] = field(default_factory=set)
+    # 도구 이름 -> 승인 실행 완료 문구(문자열 또는 args -> 문자열).
+    action_done_messages: Dict[str, Any] = field(default_factory=dict)
+    # 도구 이름 -> 승인 완료 후속 제안 빌더(async (pending, args, user_info, conversation_id) -> str).
+    followup_builders: Dict[str, Callable[..., Awaitable[str]]] = field(default_factory=dict)
+    # 핵심 도구가 승인 도구라 라우터가 조회로 분류해도 늘 실행 질의로 넘길 도메인(예: 예약 만들기).
+    always_action_domains: Set[str] = field(default_factory=set)
+    # 도메인 -> 워커 지침 덧붙임(supervisor._DOMAIN_ADDENDA 에 더해진다).
+    domain_addenda: Dict[str, str] = field(default_factory=dict)
     # MCP 도구 인자의 사람 이름 -> 식별자 해석.
     person_resolver: Optional[PersonResolver] = None
     # PII 가드가 쓰는 디렉터리 클라이언트 팩토리(.enabled 속성과 fetch 대상).

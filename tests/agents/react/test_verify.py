@@ -177,15 +177,6 @@ def test_collect_facts_counts_budget_guard_blocks():
     assert "예산 가드: 중복 검색 차단 1회, 상한 차단 1회" in V._facts_lines(f)
 
 
-def test_guide_abstain_judge_provider_defaults_to_env(monkeypatch):
-    """가이드 기권 판정기도 프로바이더를 박지 않는다 — 비우면 DEFAULT_LLM_PROVIDER 를 따른다."""
-    from agent_arch.core.config import Settings
-    from agent_arch.llm.factory import LLMFactory
-
-    assert Settings.model_fields["guide_kb_abstain_judge_provider"].default == ""
-    # 빈 값은 정규화가 그대로 돌려주고, 호출부(LLMFactory.create)가 배포 기본값으로 떨군다.
-    assert not LLMFactory.normalize_provider("")
-
 
 def test_numbers_not_in_results_uses_full_result_text():
     """벤치(2026-09-23): 근거에 없는 수치가 최다 감점인데 검증기는 전부 pass — 행당 200~500자 요약으론 대조가 안 된다."""

@@ -36,8 +36,6 @@ from langsmith import get_current_run_tree
 from agent_arch.core.config import settings
 from agent_arch.agents.graphs.router import (
     CROSS_DOMAIN_READERS,
-    SCHEDULE_DOMAIN,
-    SCMS_ORDER_DOMAIN,
     ROUTABLE_DOMAINS,
     FIND_TOOL_FOR_DOMAIN,
     RoutePlan,
@@ -122,7 +120,7 @@ def _has_pending_draft(domain: Optional[str]) -> bool:
 
 # 실행을 분명히 시키는 말(명령형) — "수정해줘", "등록해 주세요", "반영해줄래", "바꿔줘" …
 _IMPERATIVE_WRITE = re.compile(
-    r"(수정|등록|반영|변경|정정|발주|생성|입력)\s*(을|를)?\s*(해|하여|해서)?\s*(줘|주세요|줄래|주라|주십시오|줄\s*수)"
+    r"(수정|등록|반영|변경|정정|생성|입력)\s*(을|를)?\s*(해|하여|해서)?\s*(줘|주세요|줄래|주라|주십시오|줄\s*수)"
     r"|(바꿔|고쳐|올려|넣어)\s*(줘|주세요|줄래|주라)"
     # 고객 요청을 전하는 말 — "납기도 1주 당겨 달라고 합니다", "5,000개로 늘려 달랍니다"(시연 대본 2026-10-12)
     r"|(늘려|당겨|줄여|미뤄|바꿔|올려|변경해|수정해)\s*(달라|달랍|주라고|달래)"
@@ -132,9 +130,9 @@ _IMPERATIVE_WRITE = re.compile(
 def _promote_imperative_to_action(plan: "RoutePlan", user_input: str) -> "RoutePlan":
     """한 도메인을 조회로만 분류했는데 문장이 실행을 분명히 시키면 실행도 함께 돌린다(조회는 그대로).
 
-    2026-10-12 운영: 변경 발주서 PDF 를 붙이고 "…5000개로 바뀌고 납기일도 일주일 앞당겨졌어 수정해줘" 라고 했는데
-    라우터가 '첨부 PDF 변경 내용 확인' 조회로만 분류했다 — 조회 워커에는 승인 도구(수주서 수정)가 없어 "ERP 에서 직접
-    반영하라" 고 답했다. 첨부가 붙으면 라우터가 '읽기' 에 끌려 끝의 '수정해줘' 를 실행으로 넘기지 않는다.
+    2026-10-12 실측: 변경된 주문서 PDF 를 붙이고 "…5000개로 바뀌고 납기일도 일주일 앞당겨졌어 수정해줘" 라고 했는데
+    라우터가 '첨부 PDF 변경 내용 확인' 조회로만 분류했다 — 조회 워커에는 승인 도구(주문 수정)가 없어 "업무 시스템에서
+    직접 반영하라" 고 답했다. 첨부가 붙으면 라우터가 '읽기' 에 끌려 끝의 '수정해줘' 를 실행으로 넘기지 않는다.
     실행은 승인 카드까지만 가므로(confirm 게이트) 잘못 올려도 카드가 뜰 뿐이다. 조회 결과는 실행 워커에 인계된다.
     """
     if plan is None or len(plan.domains) != 1 or plan.actions or not _IMPERATIVE_WRITE.search(user_input or ""):
@@ -143,36 +141,6 @@ def _promote_imperative_to_action(plan: "RoutePlan", user_input: str) -> "RouteP
     logger.info("[supervisor] 명령형 실행 요청 → %s 실행 질의 추가(라우터는 조회만)", d)
     return RoutePlan(domains=plan.domains, subqueries=dict(plan.subqueries), actions={d: user_input},
                      confidence=plan.confidence, follow_up=plan.follow_up, **_web_plan(plan))
-
-
-# 드라이브 엑셀을 물류로 옮기라는 말 — "물류 마이그레이션 폴더 엑셀파일들 물류로 마이그레이션 해줘"(2026-10-13).
-# ⚠️ '마이그레이션' 만으로 보지 말 것 — 폴더 이름이 '물류 마이그레이션' 이라 "물류 마이그레이션 폴더에 뭐 있어?"(조회)도
-#    걸린다. 실행 말('해줘·해 주세요·진행·시켜·부탁')이 붙을 때만.
-_MIGRATE_WORD = re.compile(
-    r"(마이그레이션|마이그레이트|이관|migrat\w*)\s*(을|를)?\s*(좀\s*)?(해|하여|진행|시켜|부탁|하자|할래)", re.IGNORECASE)
-_MIGRATE_FILE = re.compile(r"엑셀|xlsx|파일|폴더|드라이브", re.IGNORECASE)
-
-
-def _route_migration_to_logistics(plan: "RoutePlan", user_input: str) -> "RoutePlan":
-    """드라이브 엑셀 → 물류 이관 요청이면 logistics **실행** 하나로 보낸다(drive 조회는 뺀다).
-
-    '폴더'·'엑셀파일' 이 파일 신호라 라우터가 drive 조회로 보내거나(조회 워커엔 이관 도구가 없다) drive 조회 +
-    logistics 실행으로 나눈다. 이관 도구(logistics_migrate_drive_excel)는 **파일을 직접 받으므로** drive 워커가
-    읽을 필요가 없고, 병렬로 돌면 파일 목록 답이 이관 카드와 섞인다. 실행은 승인 카드까지만 간다(confirm 게이트).
-    """
-    text = user_input or ""
-    if not (_MIGRATE_WORD.search(text) and _MIGRATE_FILE.search(text)) or not domain_available("logistics"):
-        return plan
-    if plan is not None and plan.domains == ["logistics"] and plan.action_query("logistics"):
-        return plan
-    others = [d for d in (plan.domains if plan else []) if d not in ("drive", "logistics")]
-    logger.info("[supervisor] 물류 이관 요청 → logistics 실행 (router=%s)", plan.domains if plan else None)
-    return RoutePlan(
-        domains=["logistics", *others],
-        subqueries={d: q for d, q in (plan.subqueries.items() if plan else []) if d in others},
-        actions={"logistics": text, **{d: q for d, q in (plan.actions.items() if plan else []) if d in others}},
-        confidence=1.0, follow_up=bool(plan and plan.follow_up), **_web_plan(plan),
-    )
 
 
 def _bias_to_action_for_pending_draft(
@@ -243,17 +211,12 @@ async def _decide(router_llm, user_input: str, confidence_threshold: float,
     한 번 더 통과시킨다.
     """
     plan = await route(router_llm, user_input, prior_domain=prior_domain, prior_domains=prior_domains, history=history)
-    # 드라이브 엑셀 → 물류 이관은 직전 턴(드라이브 목록 조회)을 잇지 않는다 — 상속·저신뢰 punt 보다 먼저 본다.
-    migrated = _route_migration_to_logistics(plan, user_input)
-    if migrated is not plan:
-        return migrated, True
-    # 메신저 발주요청은 요청 단위로만 생기는 도메인이라 직전 턴에는 없었다 — 상속으로 덮으면 그 턴에 없던
-    # 선택지를 다시 빼앗는다(실측 2026-09-23: 같은 스레드에서 앞선 "발주요청해줘" 가 전자결재로 샜고,
-    # 기능을 켠 뒤엔 라우터가 scms_order 1.00 을 냈는데 follow-up 상속이 eapproval 로 되돌렸다).
-    # 이 도메인의 도구는 승인 도구 하나라 조회로 태우면 도구가 빠진다 — 늘 실행 질의로 넘긴다.
-    # 예약(schedule)도 같다: "평일 9시 40분에 환율 알려줘" 는 문장이 조회처럼 보여 READ 로 가기 쉬운데, READ 는
-    # 승인 도구(schedule_create)를 빼므로 예약을 만들 수단이 없다. 목록·삭제는 승인 도구가 아니라 실행 질의에도 있다.
-    forced = [d for d in _ALWAYS_ACTION_DOMAINS
+    # 핵심 도구가 승인 도구인 도메인(extensions.always_action_domains)은 늘 실행 질의로 넘긴다.
+    # 요청 단위로만 생기는 opt-in 도메인은 직전 턴에는 없었다 — 상속으로 덮으면 그 턴에 없던 선택지를 다시
+    # 빼앗는다(실측 2026-09-23: 기능을 켠 뒤 라우터가 그 도메인 1.00 을 냈는데 follow-up 상속이 다른 도메인으로
+    # 되돌렸다). 그리고 READ 서브런은 승인 도구를 빼므로, 문장이 조회처럼 보여도("평일 9시에 환율 알려줘" 같은
+    # 예약 요청) 조회로 태우면 그 도메인의 수단이 사라진다.
+    forced = [d for d in _always_action_domains()
               if plan is not None and d in plan.domains and domain_available(d)]
     if forced and plan.confidence >= confidence_threshold:
         acts = dict(plan.actions)
@@ -383,32 +346,19 @@ def _bound_tools_guidance(tools) -> str:
 # web: 검색 1회 → 답으로 끝나던 실측(브라켓 종류 혼재·무관 시장으로 채움·2017년 위키를 '최근 논문'으로)에 대한 절차.
 # 도구는 브레이브 MCP(brave_llm_context = 검색+본문 조각, brave_web_search = 링크, brave_news_search = 뉴스).
 # 라우터가 조회로 분류해도 늘 실행(WRITE) 질의로 넘기는 도메인 — 핵심 도구가 승인 도구라 READ 에서 빠진다.
-_ALWAYS_ACTION_DOMAINS = (SCMS_ORDER_DOMAIN, SCHEDULE_DOMAIN)
+def _always_action_domains() -> tuple:
+    from agent_arch.extensions import extensions
+
+    return tuple(extensions.always_action_domains)
+
+
+def _extension_addendum(domain: str) -> str:
+    from agent_arch.extensions import extensions
+
+    return extensions.domain_addenda.get(domain, "")
+
 
 _DOMAIN_ADDENDA = {
-    # 예약: 지금 답을 내지 말고 예약을 만든다. 실행 때는 이 대화가 없으니 요청문을 완결되게 쓴다.
-    "schedule": (
-        "\n- '매일/평일/매주 ~에 … 해줘' 는 **지금 답하지 말고 schedule_create 로 예약한다.** 예약할 내용을 "
-        "지금 조회하지 않는다.\n- prompt 는 실행 때 혼자 읽어도 되는 완결된 요청문으로 쓴다. 사용자가 정해 둔 규칙이 "
-        "있으면 넣는다.\n- 반복 주기와 시각은 **사용자가 말한 값만** 쓴다. 말하지 않았으면 schedule_create 를 부르지 말고 "
-        "언제 할지 묻는다 — 도구 설명의 예시 값으로 채우지 않는다. 승인이 필요한 일(메일 발송·상신 등)은 예약할 수 없다고 안내한다.\n"
-        "- 목록은 schedule_list, 취소는 schedule_list 로 찾은 뒤 schedule_delete."
-    ),
-    # 메신저 발주요청: 도구를 안 부르고 "품명·수량·납기를 알려주세요" 로 처음부터 되묻던 실측(2026-09-23, 3턴
-    # 연속 도구 호출 0회 — 스레드에 품명·수량이 있었다). 무엇이 있고 무엇을 물을지는 도구가 계산하므로
-    # 도구를 먼저 부르는 절차만 정한다.
-    "scms_order": (
-        "\n- 발주요청은 **먼저 scms_order_request_draft 를 부른다.** 스레드 대화와 첨부에서 찾은 값만 넣고 "
-        "모르는 값은 비운 채 부른다 — 값이 모자라도 부른다. 도구가 확인된 값과 물어볼 값을 "
-        "돌려준다. 스레드 도면은 도구가 직접 읽으니 파일을 따로 읽지 않는다.\n"
-        "- 사용자에게는 도구가 돌려준 required_next 항목만 묻는다. 도구를 부르지 않은 채 품명·수량·납기를 "
-        "처음부터 묻지 마라. 사용자가 답하면 **답한 값만** 넣어 다시 부른다(앞서 준 값은 도구가 기억한다).\n"
-        "- 사용자가 그만두겠다고 하면 cancel=true, 선택 항목을 넘어가겠다고 하면 skip_optional=true 로 부른다.\n"
-        "- 도구가 `질문` 으로 확인한 값에 사용자가 이번 말로 답하면(예: '네', '그걸로요') 그 field 를 answered 에 "
-        "넣어 부른다. 스레드에서 다른 사람과 나눈 말은 답이 아니다 — 넣지 않는다.\n"
-        "- 거래유형·견적 마감 기한·대금 지급 조건은 묻지 않는다 — SCMS 화면에서 사람이 고른다.\n"
-        "- 지난 턴에 같은 질문을 했더라도 그 답을 되풀이하지 말고, 이번 턴의 대화·답으로 다시 부른다."
-    ),
     # 벤치(2026-09-23, ChatGPT 대비 30문항)로 다시 썼다. 옛 문구 "검색 1회로 끝내지 마라"가 난이도와 무관하게 모든 질문을
     # 상한(8회)까지 밀었다(하도급법 60일 11회·주가 9회, 턴당 32만 토큰 — ChatGPT 는 평균 5회·3.9만). 감점의 대부분은 검색 부족이
     # 아니라 근거 없는 덧붙임·시점 섞인 수치·리포트팜 출처였다 → 노력은 질문에 맞추고, 답은 결과에 있는 것만.
@@ -486,6 +436,7 @@ def _worker_directive(domain: str) -> str:
         "- 사용자가 직전 답변의 근거·출처를 물으면 대화 기록에 있는 도구 결과와 답변 끝의 '출처' 표기로 "
         "답하라. 기록에 없으면 없다고 말하고, 어디서 나온 정보인지 지어내지 마라."
         + _DOMAIN_ADDENDA.get(domain, "")
+        + _extension_addendum(domain)
     )
 
 
@@ -664,7 +615,7 @@ def _scope_messages(messages: list, subquery: str, domain: str, *, mode: str = "
     #     단, content 를 서브쿼리로 갈아끼우면 원본 augmented_input 의 "[이미지 컨텍스트]"
     #     텍스트 단서가 사라진다 — 이미지는 message.images 에 그대로 남지만(model_copy 가
     #     content 만 교체) 워커가 텍스트로는 "이미지 첨부됨"을 못 읽어 이미지 기반 도구
-    #     (예: eapproval_extract_receipt)를 안 부르는 문제가 생긴다. 첨부가 있으면 신호를
+    #     (예: 영수증 판독)를 안 부르는 문제가 생긴다. 첨부가 있으면 신호를
     #     덧붙인다(도메인 무관 — 이미지 없으면 빈 문자열이라 무영향).
     #     같은 이유로 "[직전 거절된 초안]" 블록도 이월한다. orchestrator 가 augmented_input 에
     #     붙여 라우터가 정정 턴을 실행으로 분류하게 했는데, 여기서 content 를 갈아끼우면 정작
@@ -707,7 +658,7 @@ _DRAFT_NOTE = "발송/등록 초안을 준비했어요 — 아래 카드에서 �
 def _draft_note(drafts: list) -> str:
     """초안 카드 위 한 줄. 카드(view)가 자기 안내(`draft_note`)를 주면 그것을, 아니면 공통 문구.
 
-    공통 문구는 메일·일정·발주 등 모든 승인 도구에 붙어 "발송/등록" 이 맞지 않는 카드가 있다 — 물류 이관 카드에
+    공통 문구는 메일·일정 등 모든 승인 도구에 붙어 "발송/등록" 이 맞지 않는 카드가 있다 — 일괄 이관 카드에
     "발송/등록 초안을 준비했어요" 가 떴다(2026-10-13). 첫 초안 카드의 문구만 쓴다(나머지는 차례로 뜬다).
     """
     view = (drafts[0] or {}).get("draft_view") if drafts and isinstance(drafts[0], dict) else None
@@ -1508,7 +1459,7 @@ def _guard_synth_names(text: str, user_input: str, ok_results: list, requester: 
         return text
     evidence = _synth_evidence(user_input, ok_results, requester)
     # 스트리밍 보류 조건(has_unnamed_author)과 같은 게이트를 쓴다 — 붙들지 않은 턴에서
-    # 본문을 바꾸면 화면 ≠ 히스토리가 되고, demo 모드의 가상 이름도 건드리게 된다.
+    # 본문을 바꾸면 화면 ≠ 히스토리가 되고, 시연용 가상 이름도 건드리게 된다.
     if not has_unnamed_author(evidence):
         return text
     return redact_unsourced_names(text, find_unsourced_person_names(text, evidence))

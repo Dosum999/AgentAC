@@ -101,16 +101,15 @@ class TestRows:
         pool = _FakePool(rows=[{
             "id": "0f9c1e64-0000-4000-8000-000000000001",
             "created_at": created,
-            "user_email": "u@slb.co.kr",
+            "user_email": "u@example.com",
             "query": "q",
             "answer": "a",
             "rating": "thumbs_up",
             "langsmith_run_id": None,
-            "company": "에스엘비메탈",
+            "company": "테스트메탈",
             "service": "messenger",
             "model_name": "gpt-5.6-luna",
             "response_time": 12.4,
-            "answer_mode": "reasoning",
             "web_search": True,
             "finish_reason": None,
             "status_code": None,
@@ -124,8 +123,8 @@ class TestRows:
         assert rows == [{
             "message_id": "0f9c1e64-0000-4000-8000-000000000001",
             "created_at": created,
-            "user_email": "u@slb.co.kr",
-            "company": "에스엘비메탈",
+            "user_email": "u@example.com",
+            "company": "테스트메탈",
             "query": "q",
             "answer": "a",
             "rating": "thumbs_up",
@@ -133,7 +132,6 @@ class TestRows:
             "service": "messenger",
             "model_name": "gpt-5.6-luna",
             "response_time": 12.4,
-            "answer_mode": "reasoning",
             "web_search": True,
             "finish_reason": None,
             "status_code": None,
@@ -157,7 +155,7 @@ class TestRows:
         pool = _FakePool(rows=[{
             "id": "0f9c1e64-0000-4000-8000-000000000002",
             "created_at": datetime(2026, 7, 1, 2, 30, tzinfo=timezone.utc),
-            "user_email": "u@slb.co.kr",
+            "user_email": "u@example.com",
             "query": "q",
             "answer": "a",
             "rating": None,
@@ -166,7 +164,6 @@ class TestRows:
             "service": None,
             "model_name": None,
             "response_time": None,
-            "answer_mode": None,
             "web_search": None,
             "finish_reason": None,
             "status_code": None,
@@ -179,25 +176,25 @@ class TestRows:
 
     @pytest.mark.asyncio
     async def test_selects_the_answer_meta_axes(self, fake_pool):
-        """답변이 만들어진 조건 네 축도 같은 쿼리에서 고른다.
+        """답변이 만들어진 조건 세 축도 같은 쿼리에서 고른다.
 
         모델·소요 시간은 v7 부터 이 표에 있었지만 이 SELECT 에 없어 푸시에 실리지 않았고,
         그래서 PA 리뷰 화면에서 "어떤 조건에서 나온 답인가"를 되짚을 수 없었다.
         """
         await list_review_turns()
-        for column in ("m.model_name", "m.response_time", "m.answer_mode", "m.web_search"):
+        for column in ("m.model_name", "m.response_time", "m.web_search"):
             assert column in fake_pool.last_sql, column
 
     @pytest.mark.asyncio
     async def test_answer_meta_is_none_for_rows_predating_the_axes(self, monkeypatch):
-        """축 도입 이전 턴은 네 값 모두 None 이다 — 'quick'·False 를 지어내지 않는다.
+        """축 도입 이전 턴은 세 값 모두 None 이다 — False 를 지어내지 않는다.
 
-        지어내면 그 순간 과거 전체가 "빠른 답변으로, 웹 없이 답한 턴"이 된다.
+        지어내면 그 순간 과거 전체가 "웹 없이 답한 턴"이 된다.
         """
         pool = _FakePool(rows=[{
             "id": "0f9c1e64-0000-4000-8000-000000000003",
             "created_at": datetime(2026, 7, 1, 2, 30, tzinfo=timezone.utc),
-            "user_email": "u@slb.co.kr",
+            "user_email": "u@example.com",
             "query": "q",
             "answer": "a",
             "rating": None,
@@ -206,7 +203,6 @@ class TestRows:
             "service": None,
             "model_name": None,
             "response_time": None,
-            "answer_mode": None,
             "web_search": None,
             "finish_reason": None,
             "status_code": None,
@@ -216,9 +212,7 @@ class TestRows:
         monkeypatch.setattr(messages_module.db_pool, "get_pool", lambda: pool)
 
         row = (await list_review_turns())[0]
-        assert [row["model_name"], row["response_time"], row["answer_mode"], row["web_search"]] == [
-            None, None, None, None,
-        ]
+        assert [row["model_name"], row["response_time"], row["web_search"]] == [None, None, None]
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_db_disabled(self, monkeypatch):
@@ -272,7 +266,7 @@ class TestFailureFields:
         pool = _FakePool(rows=[{
             "id": "0f9c1e64-0000-4000-8000-000000000009",
             "created_at": datetime(2026, 7, 1, 2, 30, tzinfo=timezone.utc),
-            "user_email": "u@slb.co.kr",
+            "user_email": "u@example.com",
             "query": "q",
             "answer": "a",
             "rating": None,
@@ -281,7 +275,6 @@ class TestFailureFields:
             "service": None,
             "model_name": None,
             "response_time": None,
-            "answer_mode": None,
             "web_search": None,
             "finish_reason": "error",
             "status_code": 500,

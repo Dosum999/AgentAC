@@ -26,7 +26,7 @@ class GateMode(str, Enum):
         ACCESS_ONLY: ``permissions[svc]``에 ``"{svc}.access"`` 포함만 요구. 동적
             도구의 default 정책이며, 세분 권한 없이도 서비스 사용권만 보면 충분한 경우.
         PERMISSION: ``permissions[svc]``에 명시 권한 키가 포함되어야 함. 일반적인
-            logistics/mes/hr 도구가 사용.
+            업무 도메인·hr 도구가 사용.
         ROLE: ``assigned_roles``에 매칭 role 문자열이 있어야 함. "회사 관리자" 같은
             서비스 횡단 role 게이트.
         SERVICE_ADMIN: ``permissions[svc]``에 ``"{svc}.admin"`` 포함 필요. 서비스
@@ -57,8 +57,8 @@ class PermissionRequirement:
         allow_guest: ``is_guest=True`` 사용자에게도 노출할지 여부. 기본 False.
         services_any: 서비스 횡단 OR 1차 관문 (ACCESS_ONLY 전용, 2026-08-26).
             비어 있지 않으면 이 목록의 **어느 한 서비스라도** ``"{svc}.access"`` 가
-            있으면 1차 관문 통과 (예: 물류 MCP 공통 도구 ``("logistics", "mes")``
-            — 생산·재고 조회는 물류 사무실과 MES 현장이 함께 쓴다).
+            있으면 1차 관문 통과 (예: 두 부서가 함께 쓰는 공통 도구 ``("sales", "factory")``
+            — 생산·재고 조회는 사무실과 현장이 함께 쓴다).
             ``service`` 필드는 그대로 유지한다 — 검색 도메인 도출
             (registry_loader._domain_of)·로그 진단용 주 서비스.
 
@@ -67,16 +67,16 @@ class PermissionRequirement:
             귀속되므로 서비스가 복수면 키 탐색 버킷·조합 의미가 모호해지고
             (fail-safe 원칙과 충돌), ``{svc}.admin`` 횡단은 권한 상승 통로가
             된다. ROLE 은 원래 서비스 무관이라 필요 없음.
-            근거 상세: logistics-mcp/docs/tool-exposure-plan.md §3·§6.
+            (서비스 횡단 OR 은 1차 관문에서만 쓴다.)
         allow_no_profile: dmp 권한 프로필이 없는 사용자에게도 노출할지 여부(PUBLIC 모드에서만
             유효). 기본 False.
 
             왜 필요한가: PUBLIC 의 정의는 "로그인 사용자면 통과"인데, 게이트는 프로필이
-            없으면 로그인 여부와 무관하게 막는다. SCMS 처럼 dmp 권한 체계 **밖**에 있는
+            없으면 로그인 여부와 무관하게 막는다. 외부 시스템처럼 플랫폼 권한 체계 **밖**에 있는
             호스트는 게이트웨이가 검증한 sub 만 갖고 오고 프로필은 dmp 앱이 등록하므로,
             그 사용자에게는 계산기 같은 권한 무관 도구까지 전부 막힌다(채널이 도구 0개).
 
-            프로필을 SCMS 가 대신 등록하는 길은 쓰지 않는다 — 프로필은 sub 단위 **전체
+            프로필을 외부 시스템이 대신 등록하는 길은 쓰지 않는다 — 프로필은 sub 단위 **전체
             대체**라 같은 사용자의 dmp 프로필(권한 포함)을 덮어써 두 앱이 서로 밀어낸다.
             그래서 "이 도구는 프로필 없이도 된다"를 도구가 스스로 선언한다.
     """

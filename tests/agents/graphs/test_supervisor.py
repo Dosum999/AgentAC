@@ -411,7 +411,7 @@ async def test_sticky_fallback_preserves_prior_action_and_binds_action_tool(monk
     """거절 후 정정 턴: 라우터 punt 여도 직전 승인도구(create)를 WRITE 로 복원해 초안 재생성.
 
     회귀(실측 2026-07-27~31): sticky fallback 이 도메인만 복원해 정정 요청이 READ 기본값으로
-    떨어졌고, READ 의 requires_approval 필터가 eapproval_create_document 를 제거해 NOT FOUND
+    떨어졌고, READ 의 requires_approval 필터가 mail_send_message 를 제거해 NOT FOUND
     → LLM 이 '상신 준비했습니다'를 환각(answer_guard 가 문구만 제거, 초안 0건).
     """
     captured = []
@@ -423,7 +423,7 @@ async def test_sticky_fallback_preserves_prior_action_and_binds_action_tool(monk
             content="수정 초안",
             finish_reason="action_pending",
             pending_queue=[{
-                "tool_name": "eapproval_create_document",
+                "tool_name": "mail_send_message",
                 "action_id": "a-revised",
                 "draft_view": {"kind": "draft"},
             }],
@@ -431,10 +431,10 @@ async def test_sticky_fallback_preserves_prior_action_and_binds_action_tool(monk
 
     monkeypatch.setattr(_sup, "run_react_graph", fake_worker)
     # 라우터 punt: actions 를 쓰다 JSON 이 잘린 실측 패턴.
-    router = _llm_json('{"domains":["eapproval"],"actions":{"eapproval":"결')
+    router = _llm_json('{"domains":["mail"],"actions":{"mail":"결')
     resolve = AsyncMock(return_value=[])   # retrieval 이 놓쳐도 sticky 로 create 가 복원돼야 함
     fallback = AsyncMock(return_value=LoopResult(content="fallback", finish_reason="stop"))
-    sticky = [_make_tool("eapproval_create_document")]  # 직전 턴 = 승인(실행) 도구 사용
+    sticky = [_make_tool("mail_send_message")]  # 직전 턴 = 승인(실행) 도구 사용
     user_input = "결제수단 법인카드(0993)으로 바꿔줘"
 
     r = await run_supervisor(
@@ -443,16 +443,16 @@ async def test_sticky_fallback_preserves_prior_action_and_binds_action_tool(monk
         make_worker_llm_fn=_wllm_factory(_single_answer_specs),
         fallback_fn=fallback,
         router_llm=router,
-        prior_domain="eapproval",
+        prior_domain="mail",
         sticky_tools=sticky,
     )
 
     fallback.assert_not_called()
     # 정정 발화가 READ(기본)가 아니라 WRITE(action) 질의로 갔고,
-    resolve.assert_awaited_once_with(user_input, "eapproval")
+    resolve.assert_awaited_once_with(user_input, "mail")
     assert captured[0]["query"] == user_input
     # retrieval 이 비어도 sticky create 가 WRITE 에 바인딩됐다(NOT FOUND 차단).
-    assert "eapproval_create_document" in captured[0]["tools"]
+    assert "mail_send_message" in captured[0]["tools"]
     # 초안이 그대로 전파된다(카드+버튼의 원료).
     assert r.finish_reason == "action_pending"
     assert r.pending_queue[0]["draft_view"]["kind"] == "draft"
@@ -469,15 +469,15 @@ async def test_sticky_fallback_without_prior_action_stays_read(monkeypatch):
 
     monkeypatch.setattr(_sup, "run_react_graph", fake_worker)
     router = _llm_json("JSON 아님")   # punt
-    resolve = AsyncMock(return_value=[_make_tool("eapproval_list_documents")])
-    sticky = [_make_tool("eapproval_list_documents")]  # 승인도구 아님 → prior_was_action=False
+    resolve = AsyncMock(return_value=[_make_tool("mail_list_messages")])
+    sticky = [_make_tool("mail_list_messages")]  # 승인도구 아님 → prior_was_action=False
 
     r = await run_supervisor(
         MagicMock(), "그거 다시 보여줘", [Message(role="user", content="q")],
         resolve_tools_fn=resolve,
         make_worker_llm_fn=_wllm_factory(_single_answer_specs),
         fallback_fn=AsyncMock(), router_llm=router,
-        prior_domain="eapproval", sticky_tools=sticky,
+        prior_domain="mail", sticky_tools=sticky,
     )
     assert r.content == "조회 답"
     # READ 서브런 1회만 돌았다(WRITE 스푸리어스 없음).
@@ -619,15 +619,15 @@ async def test_attachment_reader_reaches_write_only_worker(monkeypatch):
     async def fake_worker(llm, query, messages, tools, search_fn, max_iter, **kwargs):
         captured.append([t.name for t in tools])
         return LoopResult(content="draft", finish_reason="action_pending",
-                          pending_queue=[{"tool_name": "logistics_create_sales_order",
+                          pending_queue=[{"tool_name": "hr_request_attendance_correction",
                                           "action_id": "a1", "draft_view": {}}])
 
     monkeypatch.setattr(_sup, "run_react_graph", fake_worker)
-    router = _llm_json('{"domains":["logistics"],"subqueries":{},'
-                       '"actions":{"logistics":"발주서를 읽어 수주서 등록"},"confidence":1.0}')
+    router = _llm_json('{"domains":["hr"],"subqueries":{},'
+                       '"actions":{"hr":"발주서를 읽어 수주서 등록"},"confidence":1.0}')
     await run_supervisor(
         MagicMock(), "이 발주서 수주 등록해줘", [Message(role="user", content="q")],
-        resolve_tools_fn=AsyncMock(return_value=[_make_tool("logistics_create_sales_order")]),
+        resolve_tools_fn=AsyncMock(return_value=[_make_tool("hr_request_attendance_correction")]),
         make_worker_llm_fn=_wllm_factory(_single_answer_specs),
         fallback_fn=AsyncMock(), router_llm=router,
         global_tools=[_make_tool("calculator"), _make_tool("mattermost_read_file")],
@@ -657,56 +657,20 @@ async def test_imperative_write_request_gets_action_even_if_router_says_read(mon
         return LoopResult(content="ok", finish_reason="stop")
 
     monkeypatch.setattr(_sup, "run_react_graph", fake_worker)
-    router = _llm_json('{"domains":["logistics"],"subqueries":{"logistics":"첨부 발주서 변경 내용 확인"},'
+    router = _llm_json('{"domains":["hr"],"subqueries":{"hr":"첨부 발주서 변경 내용 확인"},'
                        '"confidence":1.0}')
 
     async def resolve(query, domain):
-        return [_make_tool("logistics_update_sales_order"), _make_tool("logistics_list_sales_orders")]
+        return [_make_tool("hr_request_leave"), _make_tool("hr_leave_balance")]
 
     await run_supervisor(
         MagicMock(), text, [Message(role="user", content=text)],
         resolve_tools_fn=resolve, make_worker_llm_fn=_wllm_factory(_single_answer_specs),
         fallback_fn=AsyncMock(), router_llm=router,
     )
-    write_runs = [c for c in captured if "logistics_update_sales_order" in c]
+    write_runs = [c for c in captured if "hr_request_leave" in c]
     assert bool(write_runs) is promoted
 
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("text, migrated", [
-    ("물류 마이그레이션에 있는 엑셀파일들 물류로 마이그레이션 해줘", True),
-    ("드라이브 자재입고 엑셀 ERP 입고처리로 이관해줘", True),
-    ("물류 마이그레이션 폴더안에 어떤 파일이 있어??", False),
-    ("자재입고 엑셀 파일 내용 뭐야?", False),
-    ("물류 마이그레이션 폴더 엑셀 이관 좀 해 주세요", True),
-])
-async def test_drive_excel_migration_goes_to_logistics_action(monkeypatch, text, migrated):
-    """'폴더·엑셀파일' 때문에 라우터가 drive 조회로 보내도 이관 요청은 logistics 실행 하나로 간다(2026-10-13).
-
-    drive 조회 워커에는 이관 도구가 없어 "ERP 에서 직접 입력하라" 로 끝났다. drive 워커는 같이 돌리지 않는다.
-    """
-    ran = []
-
-    async def fake_worker(llm, query, messages, tools, search_fn, max_iter, **kwargs):
-        ran.append([t.name for t in tools])
-        return LoopResult(content="ok", finish_reason="stop")
-
-    monkeypatch.setattr(_sup, "run_react_graph", fake_worker)
-    router = _llm_json('{"domains":["drive"],"subqueries":{"drive":"물류 마이그레이션 폴더 엑셀 확인"},'
-                       '"confidence":1.0}')
-
-    async def resolve(query, domain):
-        if domain == "drive":
-            return [_make_tool("drive_list_files")]
-        return [_make_tool("logistics_migrate_drive_excel"), _make_tool("logistics_list_goods_receipts")]
-
-    await run_supervisor(
-        MagicMock(), text, [Message(role="user", content=text)],
-        resolve_tools_fn=resolve, make_worker_llm_fn=_wllm_factory(_single_answer_specs),
-        fallback_fn=AsyncMock(), router_llm=router,
-    )
-    assert any("logistics_migrate_drive_excel" in r for r in ran) is migrated
-    assert any("drive_list_files" in r for r in ran) is (not migrated)
 
 
 def test_attachment_reader_survives_domain_global_narrowing():
@@ -1017,7 +981,7 @@ async def test_synth_output_sanitized_stream_saved_text():
 def collecting_draft(monkeypatch):
     """요청 스코프에 '되물을 값이 남은 초안' 포인터를 심는다(orchestrator 가 하는 일의 테스트판)."""
     from agent_arch.agents.context import set_collecting_draft_context
-    pointer = {"tool_name": "eapproval_create_document", "template_code": "expense-report"}
+    pointer = {"tool_name": "mail_send_message", "template_code": "expense-report"}
     set_collecting_draft_context(pointer)
     yield pointer
     set_collecting_draft_context(None)
@@ -1030,11 +994,11 @@ def test_bias_promotes_read_to_action_while_collecting(collecting_draft):
     subqueries(조회)에 넣어 _decide 가 조기 return → READ 서브런이 create 를 제거 →
     모델이 "[승인] 버튼을 눌러주세요" 문구만 쓰고 초안 0건(answer_guard 가 문구 제거).
     """
-    plan = RoutePlan(domains=["eapproval"], subqueries={"eapproval": "둘 다"}, confidence=0.60)
-    out = _sup._bias_to_action_for_pending_draft(plan, "eapproval", "둘 다")
+    plan = RoutePlan(domains=["mail"], subqueries={"mail": "둘 다"}, confidence=0.60)
+    out = _sup._bias_to_action_for_pending_draft(plan, "mail", "둘 다")
 
-    assert out.action_query("eapproval") == "둘 다"      # WRITE 로 승격
-    assert out.read_query("eapproval") is None           # read/write 동시 실행 방지
+    assert out.action_query("mail") == "둘 다"      # WRITE 로 승격
+    assert out.read_query("mail") is None           # read/write 동시 실행 방지
 
 
 def test_bias_leaves_other_domains_untouched_while_collecting(collecting_draft):
@@ -1048,11 +1012,11 @@ def test_bias_leaves_other_domains_untouched_while_collecting(collecting_draft):
 
 def test_bias_noop_without_any_pending_draft():
     """거절도 수집도 없으면 기존 동작 — 조회는 조회로 남는다."""
-    plan = RoutePlan(domains=["eapproval"], subqueries={"eapproval": "지난달 경비"}, confidence=0.9)
-    out = _sup._bias_to_action_for_pending_draft(plan, "eapproval", "지난달 경비 뭐 올렸지?")
+    plan = RoutePlan(domains=["mail"], subqueries={"mail": "지난달 경비"}, confidence=0.9)
+    out = _sup._bias_to_action_for_pending_draft(plan, "mail", "지난달 경비 뭐 올렸지?")
 
     assert out is plan
-    assert out.read_query("eapproval") == "지난달 경비"
+    assert out.read_query("mail") == "지난달 경비"
 
 
 
@@ -1099,7 +1063,7 @@ def calendar_rejected_and_expense_collecting(monkeypatch):
         "fields": [],
     })
     set_collecting_draft_context({
-        "tool_name": "eapproval_create_document", "template_code": "expense-report",
+        "tool_name": "mail_send_message", "template_code": "expense-report",
     })
     yield
     set_rejected_draft_context(None)
@@ -1108,28 +1072,28 @@ def calendar_rejected_and_expense_collecting(monkeypatch):
 
 def test_both_stashes_are_visible(calendar_rejected_and_expense_collecting):
     """예전엔 `rejected or collecting` 이라 캘린더가 이겨 경비가 가려졌다."""
-    assert set(_sup._stash_domains()) == {"calendar", "eapproval"}
+    assert set(_sup._stash_domains()) == {"calendar", "mail"}
     assert _sup._has_pending_draft("calendar")
-    assert _sup._has_pending_draft("eapproval")
-    assert not _sup._has_pending_draft("mail")
+    assert _sup._has_pending_draft("mail")
+    assert not _sup._has_pending_draft("drive")
 
 
 def test_bias_promotes_expense_even_with_calendar_rejected(
     calendar_rejected_and_expense_collecting,
 ):
     """경비 수집 승격이 캘린더 거절 stash 에 가려지지 않아야 한다."""
-    plan = RoutePlan(domains=["eapproval"], subqueries={"eapproval": "둘 다"}, confidence=0.6)
-    out = _sup._bias_to_action_for_pending_draft(plan, "eapproval", "둘 다")
-    assert out.action_query("eapproval") == "둘 다"
-    assert out.read_query("eapproval") is None
+    plan = RoutePlan(domains=["mail"], subqueries={"mail": "둘 다"}, confidence=0.6)
+    out = _sup._bias_to_action_for_pending_draft(plan, "mail", "둘 다")
+    assert out.action_query("mail") == "둘 다"
+    assert out.read_query("mail") is None
 
 
 def test_bias_promotes_only_the_routed_domain(calendar_rejected_and_expense_collecting):
     """두 stash 가 다 있어도 라우터가 고른 도메인만 승격한다(다른 도메인 오염 없음)."""
     plan = RoutePlan(
-        domains=["mail"], subqueries={"mail": "받은 메일"}, confidence=0.9,
+        domains=["drive"], subqueries={"drive": "최근 파일"}, confidence=0.9,
     )
-    assert _sup._bias_to_action_for_pending_draft(plan, "mail", "받은 메일") is plan
+    assert _sup._bias_to_action_for_pending_draft(plan, "drive", "최근 파일") is plan
 
 
 
@@ -1177,7 +1141,7 @@ def test_domain_queries_no_carry_without_sticky_at_all():
 def test_domain_queries_carry_is_domain_scoped():
     """sticky 가 다른 도메인 도구면 이어받지 않는다(교차 도메인 오염 방지)."""
     plan = RoutePlan(domains=["talk"], subqueries={}, confidence=0.9)
-    other = [_tool("eapproval_create_document")]
+    other = [_tool("mail_send_message")]
     read_q, action_q = _sup._domain_queries(plan, "talk", "hshin", sticky_tools=other)
 
     assert action_q is None and read_q == "hshin"
@@ -1225,22 +1189,24 @@ async def test_decide_follow_up_inherits_prior_domains(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_decide_scms_order_is_not_overridden_by_follow_up(monkeypatch):
-    """메신저 발주요청은 켜진 요청에만 있는 도메인 — 앞 턴(그땐 없던 선택지) 도메인 상속이 덮지 않는다."""
-    from agent_arch.agents.context import set_scms_order_enabled
+async def test_decide_opt_in_action_domain_is_not_overridden_by_follow_up(monkeypatch):
+    """요청 단위 opt-in 도메인은 켜진 요청에만 있다 — 앞 턴(그땐 없던 선택지) 도메인 상속이 덮지 않고,
+    핵심 도구가 승인 도구라 늘 실행 질의로 넘긴다(extensions.always_action_domains)."""
+    from agent_arch.extensions import extensions
+
+    enabled = {"on": True}
+    monkeypatch.setattr(extensions, "domain_available", {"calendar": lambda: enabled["on"]})
+    monkeypatch.setattr(extensions, "always_action_domains", {"calendar"})
     monkeypatch.setattr(_sup, "route", AsyncMock(return_value=RoutePlan(
-        domains=["scms_order"], confidence=1.0, follow_up=True)))
-    set_scms_order_enabled(True)
-    try:
-        plan, ok = await _sup._decide(MagicMock(), "발주요청해줘", 0.6, "eapproval", prior_domains=["eapproval"])
-        assert ok and plan.domains == ["scms_order"]
-        assert plan.action_query("scms_order") == "발주요청해줘"     # 승인 도구 하나뿐 — 조회로 태우면 도구가 빠진다
-        assert plan.read_query("scms_order") is None
-    finally:
-        set_scms_order_enabled(False)
+        domains=["calendar"], confidence=1.0, follow_up=True)))
+    plan, ok = await _sup._decide(MagicMock(), "예약해줘", 0.6, "mail", prior_domains=["mail"])
+    assert ok and plan.domains == ["calendar"]
+    assert plan.action_query("calendar") == "예약해줘"     # 승인 도구 하나뿐 — 조회로 태우면 도구가 빠진다
+    assert plan.read_query("calendar") is None
     # 꺼진 요청이면 라우터가 그렇게 내도 종전 상속 경로
-    plan, ok = await _sup._decide(MagicMock(), "발주요청해줘", 0.6, "eapproval", prior_domains=["eapproval"])
-    assert ok and plan.domains == ["eapproval"]
+    enabled["on"] = False
+    plan, ok = await _sup._decide(MagicMock(), "예약해줘", 0.6, "mail", prior_domains=["mail"])
+    assert ok and plan.domains == ["mail"]
 
 
 @pytest.mark.asyncio
@@ -1564,7 +1530,7 @@ def test_web_worker_prompt_drops_internal_answer_structure_sections():
 
 def test_draft_note_uses_card_note_when_given():
     """초안 카드가 자기 안내(draft_note)를 주면 공통 '발송/등록 초안' 대신 그것을 쓴다(물류 이관 2026-10-13)."""
-    own = [{"tool_name": "logistics_migrate_drive_excel", "draft_view": {"draft_note": "엑셀 2개를 확인했어요."}}]
+    own = [{"tool_name": "hr_request_leave", "draft_view": {"draft_note": "엑셀 2개를 확인했어요."}}]
     assert _sup._draft_note(own) == "엑셀 2개를 확인했어요."
     assert _sup._draft_note([{"tool_name": "mail_send_message", "draft_view": {}}]) == _sup._DRAFT_NOTE
     assert _sup._draft_note([{"tool_name": "x", "draft_view": None}]) == _sup._DRAFT_NOTE

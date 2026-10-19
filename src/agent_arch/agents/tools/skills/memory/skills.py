@@ -101,18 +101,6 @@ class MemorySearchTool(BaseTool):
 
         return ToolResult(success=True, output={"note": "장기 메모리(v2)가 꺼져 있습니다."})
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(
-            success=True,
-            output={
-                "memories": [
-                    {"id": "demo-1", "type": "directive", "content": "답변에 표를 쓰지 않는다.", "confidence": 0.9},
-                    {"id": "demo-2", "type": "entity_alias", "content": "'scrum' = 회사 scrum 채널", "confidence": 0.8},
-                ],
-                "count": 2,
-            },
-        )
-
 
 @register_tool
 class MemoryRememberTool(BaseTool):
@@ -191,9 +179,6 @@ class MemoryRememberTool(BaseTool):
 
         return ToolResult(success=True, output={"note": "장기 메모리(v2)가 꺼져 있습니다."})
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(success=True, output={"saved": True, "content": str(kwargs.get("content") or ""), "type": "directive"})
-
 
 @register_tool
 class MemoryForgetTool(BaseTool):
@@ -263,9 +248,6 @@ class MemoryForgetTool(BaseTool):
             )
 
         return ToolResult(success=True, output={"note": "장기 메모리(v2)가 꺼져 있습니다."})
-
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(success=True, output={"forgot": True, "type": "directive", "content": "답변에 표를 쓰지 않는다."})
 
 
 @register_tool
@@ -341,18 +323,6 @@ class RecallConversationTool(BaseTool):
         ]
         return ToolResult(success=True, output={"conversations": convos, "count": len(convos)})
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(
-            success=True,
-            output={
-                "conversations": [
-                    {"when": "2026-07-10T09:12:00", "query": "회사 scrum 채널 요약해줘",
-                     "answer": "최근 배포 일정과 QA 이슈 3건이 논의됐습니다..."},
-                ],
-                "count": 1,
-            },
-        )
-
 
 @register_tool
 class MemoryReadSceneTool(BaseTool):
@@ -416,12 +386,3 @@ class MemoryReadSceneTool(BaseTool):
             },
         )
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(
-            success=True,
-            output={
-                "found": True, "name": "mail-routine", "title": "메일 확인과 채널 공유 루틴",
-                "summary": "안 읽은 메일을 요약해 개발팀 채널에 공유하는 반복 업무",
-                "content": "사용자는 오전에 안 읽은 메일을 확인하고 요약을 개발팀 채널에 공유한다…",
-            },
-        )

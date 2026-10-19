@@ -17,14 +17,9 @@ SERVICE_ALIAS: dict[str, str] = {
     # 동적 API 도구의 external_service 값들
     "mattermost_service": "talk",
     "hr_service": "hr",
-    # 레거시 물류 서비스(mespoc_service_*, MES 앱 PoC 데모 전용, 2026-08-24 격리) —
-    # 이 한 줄이 (a) required_permissions 누락 시 권한 폴백 키와 (b) 검색 인덱스의
-    # 라우팅 도메인(loader.py 가 normalize_service(external_service) 로 도출) 을 동시에
-    # 결정한다. "mespoc" 은 Frappe 에 없는 키지만 231건 전부 명시 메타(PUBLIC)라 폴백
-    # 실경로가 없고 도메인 축으로만 쓰인다. "logistics" 로 바꾸면 PoC 가 물류 MCP
-    # 도메인(일반 채팅)에 새고, "mes" 는 향후 MES 전용 도구 몫이라 충돌 — 유지할 것.
-    "logistics_service": "mespoc",
-    "mes_service": "mes",
+    # ⚠ 이 표의 한 줄은 (a) required_permissions 누락 시 권한 폴백 키와 (b) 검색 인덱스의
+    # 라우팅 도메인(loader.py 가 normalize_service(external_service) 로 도출)을 동시에 결정한다.
+    # 전용 채널에만 열 도구 셋은 일반 도메인과 다른 키로 매핑해야 일반 채팅에 새지 않는다.
 }
 
 

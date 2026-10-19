@@ -139,10 +139,7 @@ _FALLBACK = "아직 실제로 처리하지는 않았어요. 원하시면 다시 
 # 않았어요" 였다 — `_DONE_RE` 의 `생성했습니다` 가 걸렸는데 승인 카드는 없었기 때문이다.
 # 파일 생성은 비가역도 아니고 승인 대상도 아니다(밖으로 나가는 건 mattermost_post_message
 # 의 승인 카드가 따로 막는다). 만든 것을 만들었다고 말하는 건 환각이 아니다.
-#
-# schedule_delete: 예약 삭제도 승인 없이 바로 실행된다(다음 회차부터 안 돈다 — 되살리려면 다시 만들면 된다).
-# 실측(2026-10-02 로컬 E2E): 실제로 지웠는데 답변 앞에 "아직 실제로 처리하지는 않았어요" 가 붙었다.
-DIRECT_ACTION_TOOLS = frozenset({"memory_forget", "memory_remember", "create_file", "schedule_delete"})
+DIRECT_ACTION_TOOLS = frozenset({"memory_forget", "memory_remember", "create_file"})
 
 
 def has_direct_action(tool_calls) -> bool:

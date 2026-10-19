@@ -7,36 +7,8 @@ from typing import Optional, Dict, Any
 from agent_arch.core.config import settings
 
 
-# 동기 커맨드: settings 변경 등 async가 필요 없는 커맨드
-# demo_mode 키가 없으면 실행 시점의 settings.demo_mode 값을 사용한다.
+# 동기 커맨드: async 가 필요 없는 커맨드
 _SYNC_COMMANDS: Dict[str, Dict[str, Any]] = {
-    # NOTE(2026-06-12): preference 설정 기능으로 대체 예정 — 런타임 settings 변경 커맨드 비활성화
-    # "/demo": {
-    #     "action": lambda: (setattr(settings, "agent_mode", "demo"), setattr(settings, "demo_mode", True)),
-    #     "message": "데모 모드로 전환되었습니다. LLM이 도구 없이 직접 답변합니다.",
-    #     "demo_mode": True,
-    # },
-    # "/data": {
-    #     "action": lambda: (setattr(settings, "agent_mode", "default"), setattr(settings, "demo_mode", False)),
-    #     "message": "데이터 모드로 전환되었습니다. 도구 호출 시 실제 API가 사용됩니다.",
-    #     "demo_mode": False,
-    # },
-    # "/gemini": {
-    #     "action": lambda: (setattr(settings, "default_llm_provider", "gemini"), setattr(settings, "agent_mode", "default")),
-    #     "message": "Gemini 모드로 전환되었습니다. 이후 대화는 Gemini 모델을 사용합니다.",
-    # },
-    # "/vllm": {
-    #     "action": lambda: (setattr(settings, "default_llm_provider", "vllm"), setattr(settings, "agent_mode", "default")),
-    #     "message": "vLLM 모드로 전환되었습니다. 이후 대화는 vLLM 모델을 사용합니다.",
-    # },
-    # "/openai": {
-    #     "action": lambda: (setattr(settings, "default_llm_provider", "openai"), setattr(settings, "agent_mode", "default")),
-    #     "message": "OpenAI 모드로 전환되었습니다. 이후 대화는 OpenAI 모델을 사용합니다.",
-    # },
-    # "/guide": {
-    #     "action": lambda: setattr(settings, "agent_mode", "guide"),
-    #     "message": "Guide 모드로 전환되었습니다. 이후 대화는 User Guide KB 기반 안내 흐름을 사용합니다.",
-    # },
     "/status": {
         "action": lambda: None,
         "message": None,  # handle_command에서 동적으로 생성
@@ -75,8 +47,7 @@ async def handle_command(
             message = (
                 f"현재 상태\n"
                 f"- LLM 프로바이더: {settings.default_llm_provider}\n"
-                f"- 에이전트 모드: {settings.agent_mode}\n"
-                f"- 데모 모드: {'ON' if settings.demo_mode else 'OFF'}"
+                f"- 에이전트 모드: {settings.agent_mode}"
             )
         else:
             message = spec["message"]
@@ -88,7 +59,6 @@ async def handle_command(
             "metadata": {
                 "command": command.lstrip("/"),
                 "agent_mode": settings.agent_mode,
-                "demo_mode": spec.get("demo_mode", settings.demo_mode),
             },
         }
 

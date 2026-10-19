@@ -283,8 +283,8 @@ class TestAppSurfacePlace:
     """앱 전용 창(MES 앱 채팅·음성) — 채널은 아니지만 일반 채팅과 분리된 자리."""
 
     def test_surface_makes_a_place(self):
-        assert P.surface_place("mes") == {"provider": "agent", "channel_id": "mes", "is_dm": False}
-        assert P.key_of(P.surface_place("mes")) == "agent:mes"
+        assert P.surface_place("app") == {"provider": "agent", "channel_id": "app", "is_dm": False}
+        assert P.key_of(P.surface_place("app")) == "agent:app"
 
     def test_blank_surface_is_no_place(self):
         """값이 없으면 장소 밖 — 패널 턴과 같다(중립)."""
@@ -292,15 +292,15 @@ class TestAppSurfacePlace:
         assert P.surface_place("  ") is None
 
     def test_current_key_prefers_surface_then_origin(self):
-        assert P.current_key({"memory_surface": "mes"}) == "agent:mes"
+        assert P.current_key({"memory_surface": "app"}) == "agent:app"
         assert P.current_key({"origin": _CH}) == "mattermost:ch-1"
         assert P.current_key({}) is None
 
     def test_mes_rule_is_injected_only_in_that_window(self):
         """MES 창에서 못 박은 규칙은 그 창에서만 상시 주입된다 — 패널로 따라오지 않는다."""
-        atom = {"payload": {P.PAYLOAD_PLACES: ["agent:mes"]}}
+        atom = {"payload": {P.PAYLOAD_PLACES: ["agent:app"]}}
 
-        assert P.eligible(atom, "agent:mes") is True
+        assert P.eligible(atom, "agent:app") is True
         assert P.eligible(atom, None) is False                    # 브라우저 패널
         assert P.eligible(atom, "mattermost:ch-1") is False       # 메신저 채널
 
@@ -308,12 +308,12 @@ class TestAppSurfacePlace:
         """장소 없는 기억(패널·DM)은 중립 — 그 사람 자체의 맥락이라 MES 창에도 적용된다."""
         atom = {"payload": {}}
 
-        assert P.eligible(atom, "agent:mes") is True
-        assert P.rank_factor(atom, "agent:mes") == P.FACTOR_NEUTRAL
+        assert P.eligible(atom, "agent:app") is True
+        assert P.rank_factor(atom, "agent:app") == P.FACTOR_NEUTRAL
 
     def test_rank_prefers_same_window(self):
-        atom = {"payload": {P.PAYLOAD_PLACES: ["agent:mes"]}}
+        atom = {"payload": {P.PAYLOAD_PLACES: ["agent:app"]}}
 
-        assert P.rank_factor(atom, "agent:mes") == P.FACTOR_SAME
+        assert P.rank_factor(atom, "agent:app") == P.FACTOR_SAME
         assert P.rank_factor(atom, None) == P.FACTOR_NEUTRAL      # 장소 밖에선 깎지 않는다
         assert P.rank_factor(atom, "mattermost:ch-1") == P.FACTOR_OTHER

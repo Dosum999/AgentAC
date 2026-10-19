@@ -35,9 +35,6 @@ class FakeTool(BaseTool):
     def get_required_params(self) -> List[str]:
         return []
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(success=True, output=None)
-
 
 @pytest.fixture(autouse=True)
 def _reset_warn_state():

@@ -43,11 +43,6 @@ def _answer_verify_off_by_default(monkeypatch):
     # 그래프 HITL 은 레거시 loop 와 동작이 갈라짐(승인 pause 지연) → 실 settings 쓰는 테스트는
     # 기본 loop 경로로. 그래프 자체는 run_react_graph 직접 호출 테스트가 커버, flag 테스트는 override.
     monkeypatch.setattr("agent_arch.core.config.settings.use_langgraph_react", False, raising=False)
-    # SCMS 메신저 거래 구조 추출기도 LLM 을 실제로 부른다(로컬 .env 에 키가 있으면 진짜 호출) — 기본 끔.
-    # 거래 구조 테스트(tests/services/scms/test_deal_context.py)는 켜고 call_llm 을 대역으로 바꾼다.
-    monkeypatch.setattr("agent_arch.core.config.settings.scms_deal_extract_enabled", False, raising=False)
-    # 거래 문서 비전 판독도 테스트에선 끈다 — 켜 두면 그림 첨부가 실제 Gemini 를 부른다.
-    monkeypatch.setattr("agent_arch.core.config.settings.scms_deal_vision_enabled", False, raising=False)
     # 메모리 v2 도 런타임 .env(MEMORY_V2_MODE=active 등)와 독립시킨다(기본 off). v2 경로를 검증하는
     # 테스트(tests/memory_v2)는 monkeypatch 로 명시 override 한다. 안 그러면 v1 도구·저장 훅 테스트가
     # v2 백엔드(DB 필요)로 새어 실패한다.
@@ -86,12 +81,11 @@ def clean_langsmith_env():
 def channel_modes(monkeypatch):
     """전용 채널 모드 두 개를 확장 슬롯으로 등록한다(코어는 업무 도메인을 모른다).
 
-    원본에서 코어에 박혀 있던 'scms'·'logistics' 채널 모드를 테스트가 계속 쓸 수 있게
-    extensions.mode_prompts 로 꽂는다. 등록된 모드 = 채널 스코프 모드.
+    등록된 모드 = 채널 스코프 모드(extensions.mode_prompts).
     """
     from agent_arch.extensions import extensions
 
     monkeypatch.setattr(extensions, "mode_prompts", {
-        "scms": lambda surface: "구매 전용 채널 프롬프트",
-        "logistics": lambda surface: "물류 전용 채널 프롬프트",
+        "procurement": lambda surface: "구매 전용 채널 프롬프트",
+        "operations": lambda surface: "운영 전용 채널 프롬프트",
     })

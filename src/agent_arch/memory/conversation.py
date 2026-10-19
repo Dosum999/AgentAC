@@ -29,9 +29,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from agent_arch.agents.context import (
-    answer_mode as request_answer_mode,
-)
-from agent_arch.agents.context import (
     get_attachment_context,
     get_unattended_run,
     get_user_context,
@@ -283,7 +280,7 @@ REJECTED_DRAFT_TTL = 300
 #
 # 왜 필요한가: 되묻기에 짧게 답하는 턴("1번", "둘 다")은 라우터가 도메인을 못 고르거나
 # 조회로 분류한다. 그러면 READ 서브런이 requires_approval 도구를 전부 걷어내
-# eapproval_create_document 가 바인딩되지 않고, 모델은 상신한 척 문구만 쓰거나
+# 결재 상신 같은 승인 도구가 바인딩되지 않고, 모델은 상신한 척 문구만 쓰거나
 # "일시적 오류"로 끝난다(실측 2026-08-17: 4턴 중 3턴 실패). 이 포인터가 있으면
 # supervisor 가 그 턴을 실행(WRITE)으로 태워 초안 카드를 결정적으로 만든다.
 #
@@ -314,17 +311,6 @@ def _approval_post_key(conversation_id: str) -> str:
 def _pending_draft_key(conversation_id: str, template_code: str) -> str:
     return f"conversation:{conversation_id}:{PENDING_DRAFT_SUFFIX}:{template_code}"
 
-
-def _voucher_hints_key(conversation_id: str) -> str:
-    return f"conversation:{conversation_id}:voucher_hints"
-
-
-def _scms_drawing_key(conversation_id: str) -> str:
-    return f"conversation:{conversation_id}:scms_drawing"
-
-
-def _scms_draft_state_key(conversation_id: str) -> str:
-    return f"conversation:{conversation_id}:scms_draft_state"
 
 
 # 이 턴(들)에 에이전트가 **만든** 파일. 사용자가 올린 첨부(attachment_context)와 반대
@@ -424,15 +410,14 @@ def _turn_attachments_key(conversation_id: str) -> str:
 async def save_turn_attachments(
     conversation_id: Optional[str], attachments: Optional[list]
 ) -> None:
-    """이 턴에 영속화된 첨부 메타를 대화 스코프로 보관한다(증빙 후속용).
+    """이 턴에 영속화된 첨부 메타를 대화 스코프로 보관한다(첨부를 이어받는 후속 턴용).
 
-    증빙 참조는 지금까지 영수증 OCR 스킬만 만들었다. 그런데 모델이 사진을 직접 읽고
-    OCR 을 건너뛰면(프로바이더에 따라 그렇게 한다 — 실측 2026-09-29 gemini) 참조가 아예
-    생기지 않아, 상신은 되는데 증빙이 비어 나간다. 첨부 사실 자체는 어느 도구를 부르든
-    변하지 않으므로 대화 스코프에 따로 남겨, 나중 턴의 create 가 이어받게 한다.
+    첨부 참조를 특정 판독 도구(예: 영수증 OCR)만 만들게 두면, 모델이 사진을 직접 읽고 그 도구를
+    건너뛸 때(프로바이더에 따라 그렇게 한다 — 실측 2026-09-29 gemini) 참조가 아예 생기지 않아
+    나중 턴의 등록·상신에 첨부가 비어 나간다. 첨부 사실 자체는 어느 도구를 부르든 변하지
+    않으므로 대화 스코프에 따로 남겨, 나중 턴의 쓰기 도구가 이어받게 한다.
 
-    voucher_hints 와 같은 계약이다 — 전용 키, 대화당 마지막 1건(last-write-wins),
-    능동 삭제 없이 TTL 만료.
+    전용 키, 대화당 마지막 1건(last-write-wins), 능동 삭제 없이 TTL 만료.
     """
     if not conversation_id or not attachments:
         return
@@ -455,152 +440,7 @@ async def load_turn_attachments(conversation_id: Optional[str]) -> list:
     return value if isinstance(value, list) else []
 
 
-async def save_voucher_hints(conversation_id: Optional[str], hints: dict) -> None:
-    """영수증 OCR 의 전표 입력용 값(공급가액·부가세·상호 등)을 대화 스코프로 보관한다.
 
-    경비청구 stash 에 얹지 않고 **전용 키**를 쓴다 — stash 는 상신 성공 순간 삭제되는
-    (유령 초안 방지) 다른 흐름의 수명주기라, 얹으면 삭제 전에 꺼내 나르는 릴레이(래퍼
-    pop → output 편승 → hitl 통과)가 생긴다(2026-09-02 그렇게 만들었다 걷어냄). 소비자는
-    /resume 완료 문구 조립(agent 코드)뿐이므로 여기서 직접 읽으면 되고, 능동 삭제 없이
-    TTL 로 만료시킨다(대화당 마지막 영수증 1건 — stash 와 같은 last-write-wins).
-    """
-    if not conversation_id or not isinstance(hints, dict) or not hints:
-        return
-    try:
-        await redis_store.set(_voucher_hints_key(conversation_id), hints, expire=SESSION_TTL)
-    except Exception:
-        # 캐시는 부가기능 — 실패해도 생산자(OCR) 응답에 영향 주지 않는다.
-        logger.warning("voucher_hints 저장 실패 conversation_id=%s", conversation_id, exc_info=True)
-
-
-async def load_voucher_hints(conversation_id: Optional[str]) -> Optional[dict]:
-    """save_voucher_hints 로 보관한 전표 입력용 값. 없으면 None."""
-    if not conversation_id:
-        return None
-    try:
-        value = await redis_store.get(_voucher_hints_key(conversation_id))
-    except Exception:
-        return None
-    return value if isinstance(value, dict) else None
-
-
-async def save_scms_drawing_readout(conversation_id: Optional[str], readout: dict) -> None:
-    """SCMS 발주 초안용 도면 판독 결과를 대화 스코프로 보관한다.
-
-    **왜 stash 가 필요한가.** 대화 히스토리는 텍스트만 저장하므로(save_logged_in_turn 의
-    user_input 은 str), 도면 이미지는 **첨부된 그 턴에만** 모델에 실린다. 2턴째 "250개" 라고
-    말하면 모델은 도면을 못 보고 자기가 앞 턴에 뱉은 문장만 본다 — 그래서 앞서 올린 다른
-    부품의 주기가 섞여 들어간 사고가 있었다. 판독값을 여기 두면 도구가 그걸 기본값으로 쓴다.
-
-    **전용 키를 쓴다** — voucher_hints 와 같은 이유다. 수명주기가 다른 것을 한 키에 담으면
-    삭제 전에 값을 꺼내 나르는 릴레이가 생긴다.
-
-    **last-write-wins.** 도면이 첨부된 턴마다 덮어쓰고 도면 없는 턴은 건드리지 않는다.
-    새 도면이 오면 이전 판독값이 구조적으로 교체되므로, "앞 도면 값 쓰지 마라" 를 프롬프트가
-    아니라 코드가 보장한다.
-    """
-    if not conversation_id or not isinstance(readout, dict) or not readout:
-        return
-    try:
-        await redis_store.set(_scms_drawing_key(conversation_id), readout, expire=SESSION_TTL)
-    except Exception:
-        # 캐시는 부가기능 — 실패해도 판독 응답에 영향 주지 않는다(도구가 빈 stash 로 동작).
-        logger.warning("scms_drawing 저장 실패 conversation_id=%s", conversation_id, exc_info=True)
-
-
-async def clear_scms_drawing_readout(conversation_id: Optional[str]) -> None:
-    """판독 stash 를 지운다 — **초안이 승인돼 그 도면의 일이 끝났을 때.**
-
-    이 stash 는 SESSION_TTL 동안 살아 있고, 도구가 비어 있는 인자를 여기서 채운다
-    (`_merge_readout`). 한 초안을 진행하는 동안에는 그게 목적이지만, 끝난 뒤에도 남아 있으면
-    **같은 대화의 다음 발주가 앞 도면 값을 물려받는다.** 실측 2026-09-22: 브라켓 초안을
-    승인한 뒤 "가스켓 500개" 를 첨부 없이 요청하자 카드에 품번 `25560-5S000-FC`(브라켓)와
-    브라켓 주기가 실렸다 — 승인하면 그 코드로 "가스켓" 이 품목 마스터에 등록된다.
-
-    **거절 때는 지우지 않는다** — 정정 턴이 같은 도면으로 다시 만들어야 한다.
-    """
-    if not conversation_id:
-        return
-    try:
-        await redis_store.delete(_scms_drawing_key(conversation_id))
-    except Exception:
-        logger.warning("scms_drawing 삭제 실패 conversation_id=%s", conversation_id, exc_info=True)
-
-
-async def load_scms_drawing_readout(conversation_id: Optional[str]) -> Optional[dict]:
-    """save_scms_drawing_readout 로 보관한 판독 결과. 없으면 None."""
-    if not conversation_id:
-        return None
-    try:
-        value = await redis_store.get(_scms_drawing_key(conversation_id))
-    except Exception:
-        return None
-    return value if isinstance(value, dict) else None
-
-
-async def save_scms_draft_state(conversation_id: Optional[str], state: dict) -> None:
-    """발주 초안 수집 상태 — **무엇을 이미 물었나**와 **지금까지 모인 값**.
-
-    흐름을 프롬프트가 아니라 도구가 몰기 위한 기억이다. 도구는 이 상태를 보고 "필수를
-    물을 차례 / 선택을 물을 차례 / 카드를 만들 차례" 를 정한다.
-
-    - ``asked``: ``["item_code", "required", "optional"]`` 중 이미 요구한 것. 같은 질문을
-      두 번 하지 않으려는 것이고, 선택 라운드를 **한 번은 반드시** 거치게 하는 근거다.
-    - ``values``: 모델이 넘겨 준 값의 누적. 매 호출에 전체 인자를 다시 넘긴다는 보장이
-      없어서 저장한다 — 3턴째에 규격만 넘기고 수량을 빠뜨리면 수량 질문으로 되돌아간다.
-
-    판독 stash 와 같은 이유로 **전용 키**를 쓰고, 초안이 만들어지는 순간 폐기한다
-    (``clear_scms_draft_state``). 남겨 두면 다음 초안이 "이미 다 물었다" 로 시작한다.
-    """
-    if not conversation_id or not isinstance(state, dict):
-        return
-    try:
-        await redis_store.set(
-            _scms_draft_state_key(conversation_id), state, expire=SESSION_TTL
-        )
-    except Exception:
-        # 부가기능 — 실패하면 빈 상태로 떨어져 한 번 더 묻는다(값이 틀어지지는 않는다).
-        logger.warning(
-            "scms_draft_state 저장 실패 conversation_id=%s", conversation_id, exc_info=True
-        )
-
-
-async def load_scms_draft_state(conversation_id: Optional[str]) -> dict:
-    """발주 초안 수집 상태. 없으면 빈 dict."""
-    if not conversation_id:
-        return {}
-    try:
-        value = await redis_store.get(_scms_draft_state_key(conversation_id))
-    except Exception:
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
-async def clear_scms_draft_state(conversation_id: Optional[str]) -> None:
-    """초안이 만들어진 순간 폐기한다 — 다음 초안은 처음부터 묻는다."""
-    if not conversation_id:
-        return
-    try:
-        await redis_store.delete(_scms_draft_state_key(conversation_id))
-    except Exception:
-        logger.debug(
-            "scms_draft_state 삭제 실패 conversation_id=%s", conversation_id, exc_info=True
-        )
-
-
-async def clear_voucher_hints(conversation_id: Optional[str]) -> None:
-    """전표 입력용 값 소비 후 삭제 — 후속 카드/접미를 만든 순간 지운다(consume-once).
-
-    TTL(24h)만 믿으면 같은 대화의 **다음** 경비청구(영수증 없는 건)에 이전 영수증 값으로
-    잘못된 카드가 뜬다 — 카드는 원클릭 승인이라 문구 안내보다 위험이 크다. 삭제가 곧
-    /resume 재전송 멱등의 1차 방어이기도 하다(없으면 카드 생략).
-    """
-    if not conversation_id:
-        return
-    try:
-        await redis_store.delete(_voucher_hints_key(conversation_id))
-    except Exception:
-        logger.warning("voucher_hints 삭제 실패 conversation_id=%s", conversation_id, exc_info=True)
 
 
 def _pending_draft_source_key(conversation_id: str, template_code: str) -> str:
@@ -769,7 +609,7 @@ async def save_pending_draft(
         document_body: 저장할 문서 body dict.
         ttl: 캐시 만료(초). 기본은 history 와 동일한 SESSION_TTL.
         slots: 수집 상태(경비의 결제수단·대상자 응답 여부 등). 안 쓰는 양식은 생략.
-        resume_tool: 이 초안을 이어받을 승인 도구 이름(예: eapproval_create_document).
+        resume_tool: 이 초안을 이어받을 승인 도구 이름(예: 문서 상신 도구).
             주면 "되물을 값이 남은 초안 진행 중" 포인터도 함께 기록해, 짧은 답변 턴이
             조회로 오분류돼 그 도구가 바인딩되지 않는 사고를 막는다.
     """
@@ -1536,7 +1376,7 @@ def turn_place(user_info: Optional[dict]) -> Optional[dict]:
     """이 턴이 **어디서** 일어났는지 — 앱 전용 창 이름 또는 메신저 ``origin`` 을 저장용 모양으로 접는다.
 
     브라우저 패널은 둘 다 없으므로 None 이 되고, 그 턴의 metadata 는 이 기능이 없을 때와
-    바이트까지 같다. 즉 이 기록은 **분리된 자리**(MES 앱 창·메신저 채널) 전용이다.
+    바이트까지 같다. 즉 이 기록은 **분리된 자리**(앱 전용 창·메신저 채널) 전용이다.
 
     왜 필요한가: 채널·스레드는 지금까지 시스템 프롬프트의 ``[현재 위치]`` 블록에만 있었고
     어디에도 저장되지 않았다. 그래서 그 턴에서 뽑힌 기억은 자기가 어느 채널·어느 스레드에서
@@ -1557,7 +1397,7 @@ def turn_place(user_info: Optional[dict]) -> Optional[dict]:
     from agent_arch.services.memory_v2 import place as place_mod
 
     info = user_info or {}
-    # 앱 전용 창(MES 앱 채팅·음성)은 채널이 아니라 창 이름이 자리다 — 판정은 요청 경로가
+    # 앱 전용 창(전용 앱 채팅·음성)은 채널이 아니라 창 이름이 자리다 — 판정은 요청 경로가
     # 소유하고(source_routing.resolve_memory_surface → build_user_info) 여기선 접기만 한다.
     if surface := place_mod.surface_place(info.get("memory_surface")):
         return surface
@@ -1706,17 +1546,10 @@ async def save_logged_in_turn(
     # 아니라 실컬럼에 넣는다 — 일별 사용량 집계의 GROUP BY 축이라 JSONB 추출로는 인덱스를
     # 못 탄다(docker/postgres/migration_v34.sql 참조).
     service = (get_user_context() or {}).get("service")
-    # 답변이 만들어진 조건 두 축(답변 방식·웹 검색). 서비스·회사·첨부와 같은 요청 스코프에서
+    # 답변이 만들어진 조건(웹 검색 사용 여부). 서비스·회사·첨부와 같은 요청 스코프에서
     # 읽는다 — 저장 지점이 10곳이라 파라미터로 뚫으면 한 경로씩 조용히 빠진다.
-    #
-    # **두 축의 기본값이 다르다.**
-    # 답변 방식은 레인이 둘뿐이고 위탁('깊이있게 추론')만 ContextVar 를 세운다. 세워지지
-    # 않았다는 것은 곧 **기존 ReAct 경로로 답했다**는 뜻이라, 패널 밖 경로(메신저 웹훅,
-    # 승인 카드 버튼이 남기는 턴)에서도 'quick' 은 지어낸 값이 아니라 그 턴의 사실이다.
-    # 비워 두면 리뷰 화면에서 "빠른 답변도 깊이 있는 추론도 아닌 답"이라는 없는 범주가 생긴다.
-    # 웹 검색은 반대다 — **미기록(None)과 '안 썼다'(False)가 다른 사실**이다. 패널 토글을 안
-    # 거친 경로에서 False 로 접으면 그 구분을 잃으므로, 여기만 None 을 그대로 남긴다.
-    answer_mode = request_answer_mode() or "quick"
+    # **미기록(None)과 '안 썼다'(False)가 다른 사실**이다. 패널 토글을 안 거친 경로에서 False 로
+    # 접으면 그 구분을 잃으므로 None 을 그대로 남긴다.
     web_search = web_search_choice()
     # POS 대시보드 태그 프롬프트 턴 정화 — 여기(단일 깔때기)서 치환해야 pg_save_turn 의
     # lazy-create 제목 파생·Redis 재주입·메모리 추출이 전부 정화본을 받는다.
@@ -1790,7 +1623,6 @@ async def save_logged_in_turn(
             metadata=metadata,
             attachments=attachments,
             service=service,
-            answer_mode=answer_mode,
             web_search=web_search,
         )
     except Exception:

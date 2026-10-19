@@ -158,7 +158,7 @@ _FEATURES_CACHE_PREFIX = "company_agent_features:v2:"
 
 
 async def fetch_company_agent_features(company: Optional[str]) -> dict:
-    """common_app 의 Agent 패널 기능 플래그 {"web_search": bool, "answer_mode": bool}. 실패·미설정은 {} (fail-closed).
+    """common_app 의 Agent 패널 기능 플래그 {"web_search": bool, ...}. 실패·미설정은 {} (fail-closed).
 
     LLM 허용 프로바이더 조회(services/llm_settings/provider_policy)와 같은 서버-투-서버 호출·Redis 캐시다.
     """

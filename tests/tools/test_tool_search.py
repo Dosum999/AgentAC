@@ -30,9 +30,6 @@ class FakeTool(BaseTool):
     def get_required_params(self) -> List[str]:
         return []
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(success=True, output=None)
-
 
 def _registry_def(name: str, domain: str = "logistics") -> ExternalToolDef:
     return ExternalToolDef(
@@ -51,7 +48,7 @@ def _dynamic_def(name: str, domain: str = "logistics") -> ExternalToolDef:
 
 @pytest.fixture
 def tool():
-    return ToolRegistry.get("find_eapproval_tools")
+    return ToolRegistry.get("find_hr_tools")
 
 
 @pytest.fixture(autouse=True)
@@ -80,27 +77,13 @@ def allow_all(monkeypatch):
     monkeypatch.setattr(ts, "evaluate", lambda name, profile: GateDecision(allowed=True))
 
 
-def _deny(reason: DenyReason, service: str = "eapproval"):
+def _deny(reason: DenyReason, service: str = "hr"):
     """게이트를 특정 사유로 고정하는 monkeypatch 값."""
     return lambda name, profile: GateDecision(allowed=False, reason=reason, service=service)
 
 
 class TestToolSearchExecute:
-    def test_eapproval_domain_card_mentions_core_directory_approver_labels(self):
-        _, summary, _ = ts._DOMAIN_TOOLS["eapproval"]
-        assert "search_colleagues" in summary
-        assert "이름 <email>" in summary
 
-    def test_leave_domain_cards_have_non_overlapping_ownership(self):
-        _, hr_summary, hr_examples = ts._DOMAIN_TOOLS["hr"]
-        _, eapproval_summary, eapproval_examples = ts._DOMAIN_TOOLS["eapproval"]
-
-        assert "배정된 휴가 잔여량" in hr_summary
-        assert "회사에 정의된 휴가 제도" in hr_summary
-        assert "신청 가능한 휴가 종류" in eapproval_summary
-        assert "휴가 신청 문서" in eapproval_summary
-        assert all("신청 내역" not in example for example in hr_examples)
-        assert any("신청 가능" in example for example in eapproval_examples)
 
     def test_drive_domain_card_advertises_reading_file_contents(self):
         """드라이브 도구는 전부 retrieved 라 이 카드를 보고 LLM 이 호출해야 활성화된다.
@@ -119,16 +102,16 @@ class TestToolSearchExecute:
         assert tool is not None
         assert tool.exposure == "core"
         assert tool.permission_required.mode.value == "public"
-        assert ToolRegistry.get("find_eapproval_tools") is tool
+        assert ToolRegistry.get("find_hr_tools") is tool
 
     @pytest.mark.asyncio
     async def test_resolves_registry_hit_and_enqueues(self, tool, fake_search, allow_all, monkeypatch):
-        fake = FakeTool("eapproval_list_documents")
+        fake = FakeTool("hr_list_documents")
         monkeypatch.setattr(
             ts.ToolRegistry, "get",
             classmethod(lambda cls, n: fake if n == fake.name else None),
         )
-        fake_search["hits"] = [_registry_def(fake.name, domain="eapproval")]
+        fake_search["hits"] = [_registry_def(fake.name, domain="hr")]
 
         result = await tool._real_execute(query="미결 결재 문서")
         assert result.success and result.output["found"] == 1
@@ -137,11 +120,11 @@ class TestToolSearchExecute:
 
     @pytest.mark.asyncio
     async def test_resolves_dynamic_hit(self, tool, fake_search, allow_all):
-        fake_search["hits"] = [_dynamic_def("eapproval_dynamic_list_documents", domain="eapproval")]
+        fake_search["hits"] = [_dynamic_def("hr_dynamic_list_documents", domain="hr")]
         result = await tool._real_execute(query="전자결재 문서 목록")
         assert result.output["found"] == 1
         drained = drain_discovered_tools()
-        assert drained[0].name == "eapproval_dynamic_list_documents"
+        assert drained[0].name == "hr_dynamic_list_documents"
 
     @pytest.mark.asyncio
     async def test_permission_denied_tools_filtered(self, tool, fake_search, monkeypatch):
@@ -154,11 +137,11 @@ class TestToolSearchExecute:
     @pytest.mark.asyncio
     async def test_fixed_domain_passed_to_search(self, tool, fake_search, allow_all):
         await tool._real_execute(query="미결 결재")
-        assert fake_search["kwargs"]["domain"] == "eapproval"
+        assert fake_search["kwargs"]["domain"] == "hr"
 
     @pytest.mark.asyncio
     async def test_excludes_itself(self, tool, fake_search, allow_all):
-        fake_search["hits"] = [_registry_def("find_eapproval_tools", domain="eapproval")]
+        fake_search["hits"] = [_registry_def("find_hr_tools", domain="hr")]
         result = await tool._real_execute(query="도구 검색")
         assert result.output["found"] == 0
 
@@ -179,7 +162,7 @@ class TestEmptyResultDistinguishesCause:
     async def test_all_denied_by_permission_says_permission_blocked(
         self, tool, fake_search, monkeypatch
     ):
-        fake_search["hits"] = [_dynamic_def("eapproval_secret", domain="eapproval")]
+        fake_search["hits"] = [_dynamic_def("hr_secret", domain="hr")]
         monkeypatch.setattr(ts, "evaluate", _deny(DenyReason.NO_SERVICE_ACCESS))
 
         out = (await tool._real_execute(query="결재 문서")).output
@@ -201,7 +184,7 @@ class TestEmptyResultDistinguishesCause:
         도메인의 top_k 최근접일 뿐이다. 따라서 "기능은 존재하지만 권한이 없다"고
         말하면, 아예 없는 기능에 대해서도 권한 문제라고 거짓 안내하게 된다.
         """
-        fake_search["hits"] = [_dynamic_def("eapproval_unrelated", domain="eapproval")]
+        fake_search["hits"] = [_dynamic_def("hr_unrelated", domain="hr")]
         monkeypatch.setattr(ts, "evaluate", _deny(DenyReason.NO_SERVICE_ACCESS))
 
         msg = (await tool._real_execute(query="전화 연결해줘")).output["message"]
@@ -224,7 +207,7 @@ class TestEmptyResultDistinguishesCause:
         self, tool, fake_search, monkeypatch
     ):
         """NO_META 는 등록 누락(버그)이므로 '권한 요청' 안내 대상이 아니다."""
-        fake_search["hits"] = [_dynamic_def("unmapped_tool", domain="eapproval")]
+        fake_search["hits"] = [_dynamic_def("unmapped_tool", domain="hr")]
         monkeypatch.setattr(ts, "evaluate", _deny(DenyReason.NO_META, service=""))
 
         out = (await tool._real_execute(query="결재")).output
@@ -234,19 +217,19 @@ class TestEmptyResultDistinguishesCause:
     @pytest.mark.asyncio
     async def test_partial_denial_keeps_success_shape(self, tool, fake_search, monkeypatch):
         """일부만 차단되면 찾은 도구로 진행 — LLM 에 차단 사실을 알리지 않는다."""
-        allowed_name = "eapproval_list_documents"
+        allowed_name = "hr_list_documents"
 
         def selective(name, profile):
             if name == allowed_name:
-                return GateDecision(allowed=True, service="eapproval")
+                return GateDecision(allowed=True, service="hr")
             return GateDecision(
-                allowed=False, reason=DenyReason.NO_SERVICE_ACCESS, service="eapproval"
+                allowed=False, reason=DenyReason.NO_SERVICE_ACCESS, service="hr"
             )
 
         monkeypatch.setattr(ts, "evaluate", selective)
         fake_search["hits"] = [
-            _dynamic_def(allowed_name, domain="eapproval"),
-            _dynamic_def("eapproval_secret", domain="eapproval"),
+            _dynamic_def(allowed_name, domain="hr"),
+            _dynamic_def("hr_secret", domain="hr"),
         ]
 
         out = (await tool._real_execute(query="결재 문서")).output

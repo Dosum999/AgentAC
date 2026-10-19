@@ -1,7 +1,7 @@
 """메모리 v2 LLM 레인 + 관대한 JSON 파서.
 
 레인 분리: config/llm_providers.yaml 의 ``memory:`` 블록이 provider/model/max_tokens/
-temperature 를 정한다(도면 분석 ``drawing:`` 레인 선례). 대화 레인(vllm max_tokens 1024)을
+temperature 를 정한다(용도별 레인 선례). 대화 레인(vllm max_tokens 1024)을
 그대로 쓰면 10턴 배치의 atom 배열이 잘려 파싱 실패로 조용히 빈 결과가 된다(v1 실측).
 
 트레이싱 제외: 추출·판정·요약은 사용자 요청 처리가 아니라 백그라운드 유지보수라

@@ -45,7 +45,7 @@ async def save_explicit_atom(
     if looks_like_sor(text, atype):
         return None
     priority = PRIORITY_STRICT if atype == "instruction" and any(m in text for m in STRICT_MARKERS) else EXPLICIT_PRIORITY
-    # 지금 있는 자리를 찍는다 — 분리된 창(MES 앱)·메신저 채널에서 못 박은 규칙이 다른 자리까지
+    # 지금 있는 자리를 찍는다 — 분리된 창(전용 앱)·메신저 채널에서 못 박은 규칙이 다른 자리까지
     # 따라다니면 기억이 섞인다. 자동 추출은 근거 턴의 metadata 로 같은 일을 하는데
     # (extractor.stamp_places) 명시 저장만 빠져 있었다. 장소 없는 자리(패널·DM)는 None →
     # 종전처럼 중립으로 저장된다. 기록은 플래그와 무관하고 쓰임만 플래그가 가른다.

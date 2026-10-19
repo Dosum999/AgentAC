@@ -29,7 +29,6 @@ class _FakeRedis:
 def env(monkeypatch):
     import agent_arch.memory.redis_store as rs
     fake = _FakeRedis(); monkeypatch.setattr(rs, "redis_store", SimpleNamespace(redis=fake))
-    monkeypatch.setattr(settings, "demo_mode", False, raising=False)
     monkeypatch.setattr(settings, "web_search_allowed_companies", "", raising=False)
     C.set_user_context({"sub": "u1", "email": "user@example.com", "company": "(주)회사"})
     C.set_web_search_enabled(True)                    # 턴 시작: 본 URL 집합도 새로 만든다

@@ -7,7 +7,7 @@
     4. ``mode == PUBLIC`` → 서비스 사용권 검사 건너뛰고 통과 (calculator 등 범용).
     5. 공통 1차 게이트: ``permissions[svc]`` 에 ``"{svc}.access"`` 포함.
        ``services_any`` 가 있으면(ACCESS_ONLY 전용) 그 목록 중 **어느 한 서비스**
-       의 access 라도 있으면 통과 — 물류/MES 공용 도구의 서비스 횡단 OR.
+       의 access 라도 있으면 통과 — 부서 공용 도구의 서비스 횡단 OR.
     6. mode별 평가 (PERMISSION/ROLE/SERVICE_ADMIN/ACCESS_ONLY).
 
 권한 raw는 ``profile.permissions`` (서비스 키 → 권한 키 리스트) 하나로 통일됐다.

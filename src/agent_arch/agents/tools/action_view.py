@@ -38,7 +38,6 @@ _APP_SOURCE: Dict[str, str] = {
     "mailcow": "mail",
     "mail": "mail",
     "hr": "hr",
-    "eapproval": "eapproval",
 }
 _TENANT = "default"
 _RESOURCE_KEY_RE = re.compile(r"[^A-Za-z0-9._-]+")
@@ -164,7 +163,7 @@ def build_action_artifact(
 ) -> Optional[Dict[str, Any]]:
     """``view`` → dmp-frontend 워크스페이스 패널이 렌더하는 artifact dict로 합성한다.
 
-    데모 패널이 이미 소비하는 app-embed 스키마(필수 필드 + resourceUrl + payload.display)
+    워크스페이스 패널이 소비하는 app-embed 스키마(필수 필드 + resourceUrl + payload.display)
     를 따른다. ``url``은 https만 통과(임베드 허용 origin 판단은 프론트의
     AGENT_APP_EMBED_ALLOWED_ORIGINS가 담당). url·preview 둘 다 없으면 None.
 

@@ -22,8 +22,6 @@ KIND_DOMAIN: dict[str, str] = {
     "mail_folder": "mail", "mailbox": "mail", "mail_label": "mail",
     "calendar_event": "calendar", "calendar": "calendar",
     "drive_file": "drive", "drive_folder": "drive", "document": "drive", "folder": "drive",
-    "eapproval_doc": "eapproval", "approval_document": "eapproval",
-    "logistics_order": "logistics", "purchase_order": "logistics", "item": "logistics",
 }
 MAX_TOOLS_PER_DOMAIN = 12
 

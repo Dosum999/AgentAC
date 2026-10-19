@@ -91,7 +91,7 @@ async def _release(redis, key: str, token: str) -> None:
 
 # ── 승인 대기열 사본(Redis) — 재시작에도 승인 카드가 살아 있게 ─────────────────────────────
 # 체크포인터가 MemorySaver(프로세스 메모리)라 에이전트 파드가 재시작되면 그 전에 띄운 승인 카드가 전부 죽는다 —
-# 눌러도 load_pending 이 None 이라 "이미 처리된 요청입니다" 만 뜬다(2026-10-13 운영: 수주서 수정 카드를 띄운 뒤
+# 눌러도 load_pending 이 None 이라 "이미 처리된 요청입니다" 만 뜬다(2026-10-13 실측: 수정 카드를 띄운 뒤
 # 다른 배포로 파드가 바뀌었다). 큐를 체크포인트에 넣을 때 같은 큐를 Redis 에 두고, 체크포인트가 비어 있으면
 # 그 사본으로 다시 interrupt 상태를 세운다. 실행·거절로 소비된 항목은 사본에서도 빠진다(남은 것만 둔다) —
 # 그래서 "실제로 처리된 카드" 는 여전히 "이미 처리된 요청입니다" 가 된다.
@@ -230,7 +230,7 @@ async def resume_action(
     graph = get_action_graph()
     # ⚠ 빈 dict 로 재개하면 안 된다 — langgraph 의 Command(resume={}) 는 falsy 라
     #   interrupt 노드가 재실행되지 않아 "값 무수정 승인"이 전부 무동작(502)이 된다
-    #   (2026-08-13 accounting E2E 실측, af0cc87 — 이슈 revert 로 유실된 픽스 재적용).
+    #   (2026-08-13 E2E 실측 — revert 로 유실된 픽스 재적용).
     #   confirm 은 validate_resume_values 허용 키이고 실행부(_execute_one)가 pop 하므로
     #   진공 값으로 안전하다.
     resume_value = REJECT_SENTINEL if reject else (values or {"confirm": True})

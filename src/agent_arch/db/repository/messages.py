@@ -39,7 +39,6 @@ async def save_turn(
     finish_reason: Optional[str] = None,
     metadata: Optional[dict] = None,
     attachments: Optional[list] = None,
-    answer_mode: Optional[str] = None,
     web_search: Optional[bool] = None,
     service: Optional[str] = None,
 ) -> tuple[Optional[str], Optional[str]]:
@@ -71,13 +70,9 @@ async def save_turn(
         finish_reason: 마지막 LLM 응답의 finish_reason (선택). 운영/학습 substrate 분석용.
         metadata: 턴 메타데이터 dict (선택). agent.messages.metadata(JSONB)에 저장. 그래프
             스텝 계측(react_steps: node_trace/timings/iterations/discovered 등) 등 admin 전용 신호.
-        service: 이 턴이 발생한 서비스 면 (선택). datbi_browser / messenger / mes / scms /
-            drawing / guest. 관측 대시보드의 서비스별 사용량 축이며, None 이면 '미분류'로
+        service: 이 턴이 발생한 서비스 면 (선택). browser_panel / messenger / app / guest. 관측 대시보드의 서비스별 사용량 축이며, None 이면 '미분류'로
             남는다 — 판정하지 못한 면에 기본값을 지어내면 남의 사용량이 브라우저 패널
             청구에 조용히 섞인다.
-        answer_mode: 패널이 고른 답변 방식 ('quick' | 'reasoning', 선택). 고르지 않았거나
-            패널 밖 경로(메신저 등)면 None — **'quick' 으로 채우지 않는다.** 기록이 없는 턴과
-            빠른 답변을 고른 턴은 다른 사실이고, PA 리뷰 화면이 그 둘을 갈라 본다.
         web_search: 이 턴에 웹 검색이 실제로 열렸는가 (선택). None 은 기록 없음이며 False 와
             다르다 — False 로 접으면 이 축이 생기기 전 적재분 전체가 '웹을 쓰지 않은 답변'이
             된다(migration_v39 주석 참조).
@@ -120,8 +115,8 @@ async def save_turn(
              llm_provider, model_name,
              prompt_tokens, completion_tokens, total_tokens,
              langsmith_run_id, finish_reason, metadata, attachments, service,
-             answer_mode, web_search)
-        VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20, $21, $22)
+             web_search)
+        VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, $19::jsonb, $20, $21)
         RETURNING id
         """,
         conversation_id,
@@ -144,7 +139,6 @@ async def save_turn(
         metadata_json,
         attachments_json,
         service,
-        answer_mode,
         web_search,
     )
     message_id = str(row["id"]) if row else None
@@ -683,7 +677,7 @@ async def get_message_for_feedback(message_id: str) -> Optional[dict]:
 
     row = await pool.fetchrow(
         "SELECT m.query, m.answer, m.langsmith_run_id, m.action_view, m.service, "
-        "       m.model_name, m.response_time, m.answer_mode, m.web_search, "
+        "       m.model_name, m.response_time, m.web_search, "
         "       COALESCE(m.user_email, u.email) AS user_email, "
         "       m.metadata->>'company' AS company "
         "  FROM agent.messages m "
@@ -716,7 +710,6 @@ async def get_message_for_feedback(message_id: str) -> Optional[dict]:
         # 운영자가 보는 화면에서 이 축들이 비어 있다(service 와 같은 이유).
         "model_name": row["model_name"],
         "response_time": row["response_time"],
-        "answer_mode": row["answer_mode"],
         "web_search": row["web_search"],
     }
 
@@ -829,7 +822,7 @@ async def list_review_turns(
 
     Returns:
         list[dict]: {message_id, created_at, user_email, company, query, answer, rating,
-                     langsmith_run_id, service, model_name, response_time, answer_mode,
+                     langsmith_run_id, service, model_name, response_time,
                      web_search, finish_reason, status_code, capture_skip, llm_provider}.
                      DB 비활성화 시 빈 리스트.
     """
@@ -866,7 +859,6 @@ async def list_review_turns(
                -- 실리지 않아 PA 리뷰 화면에서 볼 수 없었다.
                m.model_name AS model_name,
                m.response_time AS response_time,
-               m.answer_mode AS answer_mode,
                m.web_search AS web_search,
                -- 턴 실패 분류의 원천(계약 1장). common_app 이 이 넷으로 failure_category 를
                -- 파생한다 — status_code 가 없으면 '미기록'이지 정상이 아니다.
@@ -895,11 +887,10 @@ async def list_review_turns(
             # 사용량 집계(list_daily_usage)와 같은 컬럼이다. 리뷰 화면이 메신저 에이전트 대화와
             # 브라우저 패널 대화를 구분하는 축 — 여기서 빼면 두 면이 한 목록에 섞인다.
             "service": r["service"],
-            # 리뷰 화면이 "왜 이런 답이 나왔나"를 되짚는 네 축. 없는 턴은 None 그대로 나간다 —
+            # 리뷰 화면이 "왜 이런 답이 나왔나"를 되짚는 세 축. 없는 턴은 None 그대로 나간다 —
             # common_app 이 실려 온 축만 얹으므로 빈 값이 기존 적재를 지우지 않는다.
             "model_name": r["model_name"],
             "response_time": r["response_time"],
-            "answer_mode": r["answer_mode"],
             "web_search": r["web_search"],
             "finish_reason": r["finish_reason"],
             "status_code": r["status_code"],

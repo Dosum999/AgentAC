@@ -84,11 +84,6 @@ class TestResultMapping:
 
 
 class TestExecution:
-    @pytest.mark.asyncio
-    async def test_demo_execute_returns_mock(self):
-        tool = _make_tool()
-        result = await tool._demo_execute(folder="INBOX")
-        assert result.success and "[DEMO]" in result.output["message"]
 
     @pytest.mark.asyncio
     async def test_real_execute_without_email_errors(self):

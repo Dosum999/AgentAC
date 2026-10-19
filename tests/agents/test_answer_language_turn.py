@@ -139,7 +139,6 @@ async def _preprocess(orc, text):
          patch(_PATCHES["set_user_context"]), \
          patch(_PATCHES["get_current_run_tree"], return_value=None), \
          patch(_PATCHES["settings"]) as mock_settings:
-        mock_settings.demo_mode = False
         mock_settings.enable_pii_masking = False
         mock_settings.enable_parallel_eval = False
         mock_settings.enable_user_memory = False

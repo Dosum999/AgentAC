@@ -29,11 +29,11 @@ USER_EMAIL_HEADER = "X-User-Email"
 USER_SUB_HEADER = "X-User-Sub"
 SESSION_ID_HEADER = "X-Session-Id"
 COMPANY_HEADER = "X-Company"
-# 패널이 보낸 현재 화면 경로(게이트웨이가 검증해 넘김). SCMS 처럼 "이거" 를 화면의 개체로
+# 패널이 보낸 현재 화면 경로(게이트웨이가 검증해 넘김). 업무 화면처럼 "이거" 를 화면의 개체로
 # 해석해야 하는 MCP 가 쓴다. ASCII 경로만 통과하므로 인코딩 불필요.
 SOURCE_PATH_HEADER = "X-Source-Path"
-# SCMS 화면에서 고른 활동 역할(발주사/공급사)·활동 회사. 화면이 보내면 게이트웨이가 통과시키고(header_policy
-# ALLOWED_FORWARD_HEADERS 의 x-active-role·x-active-company) 여기서 그대로 전달한다 — 없으면 SCMS 가 역할은 회사
+# 업무 화면에서 고른 활동 역할(구매사/공급사 등)·활동 회사. 화면이 보내면 게이트웨이가 통과시키고(header_policy
+# ALLOWED_FORWARD_HEADERS 의 x-active-role·x-active-company) 여기서 그대로 전달한다 — 없으면 업무 시스템이 역할은 회사
 # capability, 회사는 첫 소속으로 정해 두 역할·다중 소속 사용자가 엉뚱한 기준으로 조회됐다.
 ACTIVE_ROLE_HEADER = "X-Active-Role"
 ACTIVE_COMPANY_HEADER = "X-Active-Company"

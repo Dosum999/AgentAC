@@ -28,30 +28,20 @@ _conversation_id: ContextVar[Optional[str]] = ContextVar("conversation_id", defa
 # 실어 보내고 턴 컨텍스트가 매 턴 주입한다. 메신저 경로만 값을 넣는다.
 _thread_context: ContextVar[list] = ContextVar("thread_context", default=[])
 
-# SCMS 메신저의 ``[거래 구조]`` 블록(발주사·공급사·협력사 차수). 봇이 스레드·SCMS 주문에서 갱신해 만들고
-# 턴 컨텍스트가 스레드 블록 바로 뒤에 싣는다(app/services/scms/deal). SCMS 채널 밖에서는 None.
-_deal_context: ContextVar[Optional[str]] = ContextVar("deal_context", default=None)
-
 # 웹 검색 opt-in(요청 범위). 패널 토글(web_search=true) 과 회사 설정(agent_web_search_enabled)이 둘 다 켜졌을 때만 True.
 # 기본 None/False = 웹 도메인 닫힘 — 라우터 카드·관문·sticky·도구 실행이 전부 이 값을 본다(fail-closed).
 _web_search: ContextVar[Optional[bool]] = ContextVar("web_search_enabled", default=None)
 # 이번 턴에 열어도 되는 URL(web_fetch) — 사용자가 준 URL + 이번 턴 웹 검색 결과에 나온 URL. 턴 시작에 새 집합을 만들어 두면
 # LangGraph 노드·gather 자식 태스크가 같은 객체를 공유한다(나중에 만든 집합은 형제 태스크로 전파되지 않는다).
 _web_seen_urls: ContextVar[Optional[dict]] = ContextVar("web_seen_urls", default=None)   # {url 키: 제목}
-# 메신저 SCMS 발주요청 — 이 요청에서 scms_order 도메인을 라우팅 후보로 낼지. 메신저 봇이
-# 요청자 회사가 허용 목록(SCMS_MESSENGER_COMPANIES)에 있을 때만 켠다. 꺼져 있으면 라우터 카드도
-# 도구도 없어 이 기능 이전과 글자까지 같다(패널·다른 회사).
-_scms_order: ContextVar[bool] = ContextVar("scms_order_enabled", default=False)
-# 이번 턴에 쓰면 안 되는 도구 — {이름: 모델에 돌려줄 사유}. 메신저 SCMS 공개 범위(원청이 있을 수 있는 채널에서 플랫폼
-# 쪽 사람의 SCMS 내부 조회)가 넣는다. 바인딩에서 빼고(orchestrator._prepare_tools) 실행기에서도 막는다(react/executor).
+# 이번 턴에 쓰면 안 되는 도구 — {이름: 모델에 돌려줄 사유}. 채널 공개 범위 같은 요청 단위 정책이 넣는다
+# (예: 외부 참여자가 있을 수 있는 채널에서 내부 조회 도구를 막기). 바인딩에서 빼고(orchestrator._prepare_tools)
+# 실행기에서도 막는다(react/executor).
 _withheld_tools: ContextVar[Optional[dict]] = ContextVar("withheld_tools", default=None)
-# 예약 실행(무인) — 지금 이 턴을 보고 있는 사람이 없다. 예약 실행기가 회차를 돌리기 전에 켠다.
+# 무인 실행(예약 작업 등) — 지금 이 턴을 보고 있는 사람이 없다. 실행기가 회차를 돌리기 전에 켠다.
 # 켜져 있으면 권한 게이트가 승인 필요 도구(메일 발송·상신 등)를 전부 막는다: 저장해 둔 요청은 실행 중
 # 액션에 대한 동의가 아니다(Claude 루틴과 같은 원칙). 저장 깔때기는 이 턴을 메모리 추출에서 뺀다.
 _unattended_run: ContextVar[Optional[dict]] = ContextVar("unattended_run", default=None)
-# 답변 방식(요청 범위). 엔드포인트(_apply_answer_mode)가 회사 설정과 대조해 확정한 값을 넣는다.
-# 저장 지점이 10곳이라 파라미터가 아니라 여기로 흘려보낸다 — 첨부·회사·서비스 축과 같은 이유다.
-_answer_mode: ContextVar[Optional[str]] = ContextVar("answer_mode", default=None)
 # 직전 턴에 사용자가 [거절]한 HITL 초안({tool_name, arguments, fields}). orchestrator 가
 # 요청 전처리에서 Redis stash 를 읽어 심고, supervisor 의 라우팅 보정(_decide)과 워커 메시지
 # 스코핑(_scope_messages)이 읽는다. 함수 인자로 뚫지 않는 이유는 _image_context 와 같다 —
@@ -272,16 +262,7 @@ def web_search_choice() -> Optional[bool]:
     return _web_search.get()
 
 
-def set_answer_mode(mode: Optional[str]) -> None:
-    """이 요청의 답변 방식('quick'|'reasoning'). 엔드포인트가 확정값을 넣는다."""
 
-    _answer_mode.set((mode or "").strip() or None)
-
-
-def answer_mode() -> Optional[str]:
-    """이 요청의 답변 방식. 고르지 않았거나 패널 밖 경로(메신저 등)면 None = 기록 없음."""
-
-    return _answer_mode.get()
 # ── 직전 어시스턴트 답변 ──────────────────────────────────────────────────────
 # "방금 분석한 내용을 워드파일로 만들어줘" 류의 요청에서, 파일 본문은 **이미 직전 답변에
 # 있다.** 그걸 모델이 도구 인자로 통째로 다시 받아쓰게 하면 실패한다 — 2026-09-14 운영
@@ -325,14 +306,6 @@ def get_thread_context() -> list:
         return []
 
 
-def set_deal_context(block: Optional[str]) -> None:
-    """이번 턴의 ``[거래 구조]`` 블록을 설정한다(SCMS 메신저 전용). None/빈 값이면 비운다."""
-    _deal_context.set((block or "").strip() or None)
-
-
-def get_deal_context() -> Optional[str]:
-    """이번 턴의 ``[거래 구조]`` 블록. SCMS 메신저 밖에서는 None."""
-    return _deal_context.get()
 
 
 # 이번 턴의 사용자 발화 원문 — 도구가 모델 출력의 **근거**를 확인할 때 쓴다(예: 모델이 넘긴 회사 토큰이 발화에
@@ -421,13 +394,6 @@ def get_company_requests() -> dict:
     return dict(_company_requests.get() or {})
 
 
-def set_scms_order_enabled(flag: Optional[bool]) -> None:
-    """이 요청에서 메신저 SCMS 발주요청을 쓸 수 있는가. 오케스트레이터가 턴 시작에 넣는다."""
-    _scms_order.set(bool(flag))
-
-
-def scms_order_enabled() -> bool:
-    return _scms_order.get() is True
 
 
 def set_withheld_tools(tools: Optional[dict]) -> None:
@@ -440,7 +406,7 @@ def withheld_tools() -> dict:
 
 
 def set_unattended_run(run: Optional[dict]) -> None:
-    """예약 실행 표시 — ``{"schedule_id", "run_id"}``. None 이면 해제(사람이 보는 턴)."""
+    """무인 실행 표시 — ``{"schedule_id", "run_id"}``. None 이면 해제(사람이 보는 턴)."""
     _unattended_run.set(dict(run) if run else None)
 
 

@@ -134,7 +134,7 @@ def _is_channel_scoped(mode: str) -> bool:
 # 존재해야 한다. 관문이 전역 OFF 라 발견 경로는 이미 막혀 있지만, sticky 복원은 "직전 턴에
 # 호출된 이름"을 그대로 되살리므로 같은 대화가 일반 채팅으로 이어지면 채널 밖에서 되살아난다
 # — 그래서 이 턴에 관문이 바인딩돼 있을 때(= 그 채널일 때)만 복원한다(_sticky_prev_turn_tools).
-# 예: {"mes_": "find_mes_tools"}. 전용 채널 도메인을 붙일 때 그 도메인의 접두사·관문을 여기 등록한다.
+# 예: {"app_": "find_app_tools"}. 전용 채널 도메인을 붙일 때 그 도메인의 접두사·관문을 여기 등록한다.
 _CHANNEL_SCOPED_PREFIXES: dict[str, str] = {}
 
 # 메모리 도구가 바인딩되지 않는 모드 — 이 모드에는 회상 안정 블록의 도구 지시를 빼고
@@ -973,14 +973,14 @@ class AgentOrchestrator:
             remember_web_urls(re.findall(r"https?://[^\s<>\"')\]]+", input or ""))   # 사용자가 준 URL 은 web_fetch 로 열 수 있다
         set_withheld_tools(getattr(self, "withheld_tools", None))
         # 대화 ID 를 요청 스코프 ContextVar 에 심는다 — 대화 스코프 Redis stash(영수증 OCR
-        # document_body)를 읽고 쓰는 스킬(receipt / eapproval_create_document 래퍼)이 참조한다.
+        # document_body)를 읽고 쓰는 스킬(영수증 판독·문서 상신 래퍼 등)이 참조한다.
         set_conversation_id(conversation_id)
         if _pii_guard_mode() != "off":
             # 가명화 어휘(임직원 디렉터리) 예열 — LLM 호출 직전까지 2초만 기다리고, 늦으면 다음 턴부터 완전해진다.
             from agent_arch.llm.pii.turn import prewarm as _pii_prewarm
             _pii_prewarm()
         # 첨부 이미지를 요청 스코프 ContextVar 에 심는다 — OCR 계열 스킬(예:
-        # eapproval_extract_receipt)이 tool args 없이 "이번 요청 이미지"를 읽는다.
+        # 영수증 판독)이 tool args 없이 "이번 요청 이미지"를 읽는다.
         # _analyze_image_context 의 gather 및 이후 execute_tools 자식 Task 가 상속.
         set_image_context(images)
         # file-service 로 영속화된 첨부 메타를 심는다 — 엔드포인트가 인스턴스 속성
@@ -1263,7 +1263,7 @@ class AgentOrchestrator:
 
         채널 스코핑 모드(extensions.mode_prompts 에 등록된 전용 채널)는
         supervisor 를 건너뛴다 — supervisor 의 router 도메인 분류가 채널 스코핑
-        (도메인 전용 도구·프롬프트)을 우회해, 채널 밖 질의(예: 물류 채널에서의 근태)를
+        (도메인 전용 도구·프롬프트)을 우회해, 채널 밖 질의(예: 전용 앱 채널에서의 근태)를
         HR 등 워커로 라우팅해 도구를 실제 실행해 버리기 때문. 전용 채널은 단일
         도메인이므로 supervisor 없이 평범한 ReAct 경로로 채널 전용 프롬프트 + 채널
         도구(_prepare_tools 스코핑)만 태운다. 채널 밖 질의는 그 프롬프트대로 안내/
@@ -1812,7 +1812,7 @@ class AgentOrchestrator:
                     views_to_emit = extract_action_views(event.tool_results)
 
                 # action 도구가 동봉한 view → dmp-frontend 워크스페이스 패널 재활용.
-                # 데모 패널이 이미 소비하는 workspace.open/update/complete 시퀀스로 방출.
+                # 워크스페이스 패널이 소비하는 workspace.open/update/complete 시퀀스로 방출.
                 emitted_iframe = False  # 이번 턴에 iframe(app-embed) 뷰를 방출했는지
                 saved_card_view = None  # 과거 대화 복원용으로 메시지에 영속할 HITL 카드 아티팩트
                 for _view in views_to_emit:
@@ -1879,7 +1879,7 @@ class AgentOrchestrator:
                 # 재방출하면, 프론트 WorkspaceRouteSync 가 새 workspaceId 를 감지해 페이지를
                 # 워크스페이스 라우트로 강제 이동시킨다 → "안녕" 같은 무관한 턴에도 직전(예:
                 # 메신저) 화면으로 튀는 버그. 일반 플로우는 호스트가 워크스페이스 뷰를 턴 사이
-                # 에 유지하므로(clearWorkspace 는 데모 경로에서만 호출) 재방출 없이도 패널이
+                # 에 유지하므로(clearWorkspace 는 특정 경로에서만 호출) 재방출 없이도 패널이
                 # 남는다. 따라서 tool-less 턴에서 재방출하지 않는다.
         # main 스트림 종료 후 eval 프로바이더에 final messages를 replay
         self._kickoff_eval_replay(ctx)

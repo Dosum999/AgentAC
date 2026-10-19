@@ -120,7 +120,7 @@ async def test_maps_failed_turns_to_push_payload(monkeypatch):
         "user_email": "user@example.com",
         "company": "(주)회사",
         "model_name": "gemma-4-31b-it",
-        "service": "datbi_browser",
+        "service": "browser_panel",
         "request_count": 5,
         "input_tokens": 700,
         "output_tokens": 300,
@@ -177,9 +177,9 @@ async def test_maps_row_to_push_payload(monkeypatch):
     pool = _FakePool(rows=[{
         "usage_date": "2026-07-30",
         "user_email": "u@slbmetal.kr",
-        "company": "(주)에스엘비메탈",
+        "company": "(주)테스트메탈",
         "model_name": "gemini-2.5-flash",
-        "service": "datbi_browser",
+        "service": "browser_panel",
         "request_count": 3,
         "input_tokens": 100,
         "output_tokens": 40,
@@ -194,10 +194,10 @@ async def test_maps_row_to_push_payload(monkeypatch):
 
     assert row["usage_date"] == "2026-07-30"
     assert row["user_email"] == "u@slbmetal.kr"
-    assert row["company"] == "(주)에스엘비메탈"
+    assert row["company"] == "(주)테스트메탈"
     assert row["total_tokens"] == 140
     assert row["missing_token_rows"] == 1
-    assert row["service"] == "datbi_browser"
+    assert row["service"] == "browser_panel"
 
 
 @pytest.mark.asyncio
@@ -247,7 +247,7 @@ async def test_date_objects_pass_through(fake_pool):
 
 def _meter_db_row(**kw):
     base = {"usage_date": "2026-10-01", "user_email": "a@d.kr", "company": "(주)회사",
-            "model_name": "gpt-5.6-luna", "service": "datbi_browser", "llm_calls": 2, "llm_missing": 0,
+            "model_name": "gpt-5.6-luna", "service": "browser_panel", "llm_calls": 2, "llm_missing": 0,
             "llm_input_tokens": 1000, "llm_output_tokens": 40, "llm_cached_input_tokens": 600,
             "llm_cache_write_tokens": 100, "brave_search_calls": 0, "openai_search_calls": 0,
             "stt_seconds": 0, "last_activity_at": datetime(2026, 10, 1, 1, 0)}

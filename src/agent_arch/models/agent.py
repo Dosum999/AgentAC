@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # "올라갔는데 답을 못 함"으로 보이는 가장 나쁜 실패 모양이다. 업로드 단계에서 끊으면
 # 이유가 분명한 400 이 나간다.
 #
-# ⚠️ 도면 레인(app/api/v1/drawing.py)은 별도로 50MB 를 쓴다("Gemini inline_data 한도 고려"
+# ⚠️ 도면 판독 같은 전용 레인은 별도 한도(예: 50MB)를 쓸 수 있다("Gemini inline_data 한도 고려"
 #    라고 적혀 있다). 두 값이 다른 채로 남아 있으니, 실제 한계를 확인하면 양쪽을 맞출 것.
 _MAX_SIZE_BY_MIME: dict[str, int] = {
     "image/jpeg": 20 * 1024 * 1024,
@@ -359,7 +359,7 @@ class AgentStreamChunk(BaseModel):
 # 정의한다 — 예전엔 세 벌이었고, 그중 음성 사본에 workspace.* 가 빠져 있었다. 새 진행
 # 이벤트를 만들면 여기에만 더하면 되고, 소비자는 고칠 필요가 없다.
 #
-# "workspace.*": demo 모드 헤더 검출 시, 그리고 agent 모드에서 action 도구(view 동봉)가
+# "workspace.*": agent 모드에서 action 도구(view 동봉)가
 # 실행됐을 때 open→update→complete 시퀀스로 발사된다(dmp-frontend 워크스페이스 패널 재활용).
 # workspace.error 는 헤더 파싱 실패·LLM 예외 시 발사된다. Mattermost 봇은 workspace.update
 # 에 실린 draft artifact 로 승인 버튼을 그린다.

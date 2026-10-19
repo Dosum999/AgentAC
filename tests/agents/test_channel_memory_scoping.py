@@ -35,7 +35,7 @@ def recalled(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("mode", ["logistics", "scms"])
+@pytest.mark.parametrize("mode", ["operations", "procurement"])
 def test_channel_modes_get_no_memory_loadout(recalled, mode):
     """전용 채널은 기억 별칭이 가리키는 타 도메인 도구를 들지 않는다."""
     orc = SimpleNamespace(agent_mode=mode)

@@ -196,9 +196,9 @@ def collect_facts(state: dict, draft: str) -> dict:
                 if isinstance(r.get("url"), str):
                     known_urls.add(r["url"])
 
-    # 웹 검색이 아닌 도구가 준 링크도 근거다 — SCMS 도구는 결과에 그 건·그 화면을 여는 주소('바로 가기')를 싣는다.
+    # 웹 검색이 아닌 도구가 준 링크도 근거다 — 업무 시스템 도구는 결과에 그 건·그 화면을 여는 주소('바로 가기')를 싣는다.
     # 웹 결과 행의 url 만 모으자 그 링크를 "도구 결과에 없는 URL" 로 잡아 지우게 했다(실측 2026-10-01: '출고 어떻게 해?'
-    # 에 scms_guide 의 출고처리 링크를 붙였더니 state_limits 로 빠졌다).
+    # 에 업무 안내 도구의 처리 화면 링크를 붙였더니 state_limits 로 빠졌다).
     for r in results:
         if isinstance(r, dict) and isinstance(r.get("content"), str):
             known_urls.update(u.rstrip(".,)") for u in _URL_RE.findall(r["content"]))

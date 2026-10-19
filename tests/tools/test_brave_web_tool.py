@@ -44,7 +44,6 @@ def _result(texts=(), structured=None, is_error=False):
 def env(monkeypatch):
     import agent_arch.memory.redis_store as rs
     fake = _FakeRedis(); monkeypatch.setattr(rs, "redis_store", SimpleNamespace(redis=fake))
-    monkeypatch.setattr(settings, "demo_mode", False, raising=False)
     monkeypatch.setattr(settings, "web_search_allowed_companies", "", raising=False)
     monkeypatch.setattr(settings, "web_search_daily_quota", 0, raising=False)
     set_user_context({"sub": "u1", "email": "user@example.com", "company": "(주)회사"})
@@ -119,13 +118,6 @@ async def test_no_results_is_zero_rows_and_transport_failure_is_structured(env, 
     assert res.success is False and res.output["error"] == "provider_unavailable" and res.metadata["code"] == "provider_unavailable"
     assert [json.loads(x)["outcome"] for x in env.lists["web:audit:(주)회사"]][:2] == ["transport_error", "ok:0"]
 
-
-@pytest.mark.asyncio
-async def test_demo_mode_returns_shaped_demo(monkeypatch):
-    monkeypatch.setattr(settings, "demo_mode", True, raising=False)
-    set_user_context({"sub": "u", "email": "a@b.kr", "company": "C"})
-    res = await _tool(name="brave_llm_context").execute(query="q")
-    assert res.success and res.output["kind"] == "context" and res.output["results"][0]["url"] == "https://example.com/demo" and res.metadata["mode"] == "demo"
 
 
 @pytest.mark.asyncio

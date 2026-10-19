@@ -60,7 +60,6 @@ def patch_cfg(monkeypatch):
     """
     def _apply(enabled_map: dict, exposure_map: dict | None = None):
         # 렌더 검증은 PRODUCTION 프롬프트 대상이므로 .env 의 DEMO_MODE 와 독립시킨다.
-        monkeypatch.setattr(sysmod.settings, "demo_mode", False, raising=False)
         monkeypatch.setattr(
             sysmod.settings,
             "get_tool_config",

@@ -30,7 +30,7 @@ class ExternalToolDef(BaseModel):
     # 실물 인스턴스가 담당)는 http 필드가 없으므로 Optional. dynamic_api는 필수
     # (validator에서 강제 — 기존 안전성 유지).
     origin: str = "dynamic_api"         # "dynamic_api" | "registry"
-    # 도메인 = 정규화된 권한 서비스 키 (logistics/hr/talk/mail/...). 검색·
+    # 도메인 = 정규화된 권한 서비스 키 (hr/talk/mail/...). 검색·
     # tool_search의 도메인 필터 축이며 권한 게이트와 같은 키 체계를 쓴다.
     # 동적은 external_service 정규화, registry는 permission.service에서 도출.
     domain: Optional[str] = None

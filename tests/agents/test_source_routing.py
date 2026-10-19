@@ -139,13 +139,11 @@ class TestResolveService:
         "path,expected",
         [
             # 실제 요청 경로 — 라우터가 전부 settings.api_v1_prefix 아래 걸린다.
-            ("/api/v1/agent/stream", "datbi_browser"),
-            ("/api/v1/agent", "datbi_browser"),
-            ("/api/v1/audio/transcribe", "datbi_browser"),
-            ("/api/v1/scms/agent/stream", "scms"),
-            ("/api/v1/drawing/analyze", "drawing"),
+            ("/api/v1/agent/stream", "browser_panel"),
+            ("/api/v1/agent", "browser_panel"),
+            ("/api/v1/audio/transcribe", "browser_panel"),
             ("/api/v1/guest/run", "guest"),
-            ("/api/v1/agent/mes/run", "mes"),
+            ("/api/v1/agent/app/run", "app"),
         ],
     )
     def test_maps_real_request_paths(self, path, expected):
@@ -159,11 +157,9 @@ class TestResolveService:
     @pytest.mark.parametrize(
         "path,expected",
         [
-            ("/agent/stream", "datbi_browser"),
-            ("/agent", "datbi_browser"),
-            ("/audio/transcribe", "datbi_browser"),
-            ("/scms/agent/stream", "scms"),
-            ("/drawing/analyze", "drawing"),
+            ("/agent/stream", "browser_panel"),
+            ("/agent", "browser_panel"),
+            ("/audio/transcribe", "browser_panel"),
             ("/guest/run", "guest"),
         ],
     )
@@ -177,9 +173,9 @@ class TestResolveService:
         assert source_routing.resolve_service("/api/v1/") is None
 
     def test_longest_prefix_wins(self):
-        """'/agent/mes' 가 '/agent' 보다 먼저 잡혀야 MES 사용량이 브라우저 패널로 안 섞인다."""
-        assert source_routing.resolve_service("/agent/mes/run") == "mes"
-        assert source_routing.resolve_service("/agent/mes") == "mes"
+        """'/agent/app' 가 '/agent' 보다 먼저 잡혀야 전용 앱 사용량이 브라우저 패널로 안 섞인다."""
+        assert source_routing.resolve_service("/agent/app/run") == "app"
+        assert source_routing.resolve_service("/agent/app") == "app"
 
     def test_prefix_must_be_a_path_segment(self):
         """'/agentic' 이 '/agent' 로 잡히면 남의 사용량이 브라우저 패널 청구에 들어간다."""
@@ -198,21 +194,20 @@ class TestMemorySurface:
     def test_mes_app_chat_and_voice_share_one_window(self):
         from agent_arch.agents.source_routing import resolve_memory_surface
 
-        assert resolve_memory_surface("/api/v1/agent/mes/run") == "mes"
-        assert resolve_memory_surface("/api/v1/agent/mes/stream") == "mes"
-        assert resolve_memory_surface("/api/v1/audio/run") == "mes"
-        assert resolve_memory_surface("/audio/stream") == "mes"      # prefix 없는 형태도 받는다
+        assert resolve_memory_surface("/api/v1/agent/app/run") == "app"
+        assert resolve_memory_surface("/api/v1/agent/app/stream") == "app"
+        assert resolve_memory_surface("/api/v1/audio/run") == "app"
+        assert resolve_memory_surface("/audio/stream") == "app"      # prefix 없는 형태도 받는다
 
     def test_other_surfaces_have_no_place(self):
         from agent_arch.agents.source_routing import resolve_memory_surface
 
         assert resolve_memory_surface("/api/v1/agent/run") is None   # 브라우저 패널
-        assert resolve_memory_surface("/api/v1/scms/agent/run") is None
         assert resolve_memory_surface(None) is None
 
     def test_usage_axis_is_unchanged(self):
-        """서비스 축은 그대로 — /audio 는 사용량으로는 패널이고 자리로는 MES 창이다."""
+        """서비스 축은 그대로 — /audio 는 사용량으로는 패널이고 자리로는 전용 앱 창이다."""
         from agent_arch.agents.source_routing import resolve_service
 
-        assert resolve_service("/api/v1/audio/run") == "datbi_browser"
-        assert resolve_service("/api/v1/agent/mes/run") == "mes"
+        assert resolve_service("/api/v1/audio/run") == "browser_panel"
+        assert resolve_service("/api/v1/agent/app/run") == "app"

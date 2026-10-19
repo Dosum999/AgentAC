@@ -26,6 +26,8 @@ fallback 상수)를 **재사용** 해 로직 드리프트를 원천 차단한다
 """
 from __future__ import annotations
 
+from typing import Optional
+
 import inspect
 import json
 import logging
@@ -415,7 +417,7 @@ def _start_node(state: ReactState) -> dict:
     # 초안이 진행 중이면(수집 중·거절됨) 첫 호출을 **도구 호출로 강제**한다
     # (ANY — 어떤 도구인지는 모델이 고른다).
     #
-    # 모델이 도구를 부르지 않고 제가 답을 지어내는 일이 있다. 실측(SCMS 발주 초안):
+    # 모델이 도구를 부르지 않고 제가 답을 지어내는 일이 있다. 실측(구매 요청 초안):
     # 선택값을 묻는 결과를 받은 뒤 사용자가 "넘어가" 라고 답해도 도구를 다시 부르지 않고
     # **같은 질문을 새로 만들어** 냈다 — 그때 후보 분류가 도구가 준 목록에 없는 값이었다
     # (지어낸 증거). 같은 화면이 무한히 반복됐다.
@@ -501,7 +503,7 @@ def _force_tool_reason(known_tool_names: set) -> Optional[str]:
 def _pin_tool_for_rejected_draft(known_tool_names: set) -> Optional[str]:
     """거절된 초안이 있으면 그 도구를 **지목**한다(`allowed_tools`). 없으면 None.
 
-    `tool_mode="ANY"` 로는 부족했다 — 실측(SCMS 발주 초안): 거절 뒤 "다시 만들어줘" 턴에
+    `tool_mode="ANY"` 로는 부족했다 — 실측(구매 요청 초안): 거절 뒤 "다시 만들어줘" 턴에
     ANY 가 걸렸는데도(로그 `사유=거절됨:…`) 모델이 도구를 부르지 않고 **카드를 글로 흉내**
     냈다. `answer_guard` 가 그 환각 문구를 걷어냈지만 초안은 만들어지지 않았다.
 
@@ -917,7 +919,7 @@ async def _regenerate_names(state: ReactState, content: str) -> tuple[str, dict]
     잘못 붙이는** 피해라, 재생성으로도 안 고쳐지면 원문 유지가 아니라 마스킹한다.
     """
     # 위험한 턴(도구 결과에 @handle 작성자)에서만 돈다. 이유가 둘이다:
-    #  ① demo 모드는 프롬프트가 **의도적으로** 가상의 한국 이름을 만든다(system.py). 항상
+    #  ① 시연용 프롬프트는 **의도적으로** 가상의 한국 이름을 만든다. 항상
     #     검사하면 그 정상 동작을 마스킹해 버린다.
     #  ② 스트림 게이트(_name_guard_needed)와 조건이 같아야 한다. 붙들지 않은 턴에서 뒤늦게
     #     본문을 바꾸면 화면 ≠ 히스토리가 된다.

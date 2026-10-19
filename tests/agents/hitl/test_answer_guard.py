@@ -278,13 +278,6 @@ def test_has_direct_action_detects_memory_tools():
     assert not has_direct_action(None) and not has_direct_action(["garbage"])
 
 
-def test_schedule_delete_is_a_direct_action():
-    """예약 삭제는 승인 없이 실행된다 — 지웠다고 말한 답에 교정 문구를 붙이면 역환각(2026-10-02 E2E)."""
-    assert has_direct_action([{"name": "schedule_list"}, {"name": "schedule_delete", "arguments": {"schedule_id": "s"}}])
-    assert not has_direct_action([{"name": "schedule_list"}])
-    text = "'평일 아침 환율 알림' 예약을 삭제했어요. 이제 해당 알림은 더 이상 발송되지 않습니다."
-    assert guard_phantom_action(text, False, allow_done_claims=True) == text
-
 
 def test_done_claim_kept_when_direct_action_ran():
     text = "'답변에 표를 사용하지 않는다' 지시를 삭제했어요. 이제 표를 쓸 수 있어요."

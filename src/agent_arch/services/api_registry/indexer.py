@@ -241,7 +241,7 @@ class APIRegistryIndexer:
             include_registry: origin="registry" 포인트(정적 스킬·MCP) 포함 여부.
                 False면 기존 동작(동적 API만) — UNIFIED_TOOL_INDEXING off 상태에서
                 잔존 registry 포인트가 섞이지 않도록 하는 안전장치.
-            domain: 정규화된 도메인 키(logistics/hr/talk/mail 등)로 제한.
+            domain: 정규화된 도메인 키(hr/talk/mail 등)로 제한.
                 tool_search의 도메인 스코프 탐색용.
 
         Returns:

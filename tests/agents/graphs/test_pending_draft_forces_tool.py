@@ -26,7 +26,7 @@ from agent_arch.agents.graphs.react_graph import (
 
 pytestmark = pytest.mark.usefixtures("channel_modes")
 
-TOOL = "scms_purchase_order_draft"
+TOOL = "orders_request_draft"
 
 
 @pytest.fixture(autouse=True)
@@ -57,7 +57,7 @@ def test_pending_draft_forces_a_tool_call(setter):
 def test_unbound_tool_does_not_force():
     """그 도구가 이 턴에 안 붙었으면 강제하지 않는다 — 엉뚱한 도구를 부르게 된다."""
     set_collecting_draft_context({"tool_name": TOOL})
-    assert _force_tool_reason({"scms_order"}) is None
+    assert _force_tool_reason({"orders"}) is None
 
 
 def test_broken_stash_fails_open():
@@ -105,7 +105,7 @@ class TestRejectedDraftPinsTheTool:
 
     def test_does_not_pin_an_unbound_tool(self):
         set_rejected_draft_context({"tool_name": TOOL})
-        assert _pin_tool_for_rejected_draft({"scms_order"}) is None
+        assert _pin_tool_for_rejected_draft({"orders"}) is None
 
 
 class TestPinIsOneShot:
@@ -225,7 +225,7 @@ class TestTheGateIsChannelScoped:
             return AgentOrchestrator(agent_mode=mode)
 
     @pytest.mark.parametrize("supervisor", [True, False])
-    @pytest.mark.parametrize("mode", ["scms", "logistics"])
+    @pytest.mark.parametrize("mode", ["procurement", "operations"])
     def test_channel_scoped_modes_always_force(self, mode, supervisor):
         """supervisor 를 건너뛰는 채널 — 설정과 무관하게 켜져야 한다."""
         orc = self._orc(mode)

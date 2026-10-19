@@ -36,9 +36,6 @@ class FakeTool(BaseTool):
     def get_required_params(self) -> List[str]:
         return []
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(success=True, output=None)
-
 
 class TestExternalToolDefOrigin:
     def test_registry_origin_allows_missing_http_fields(self):

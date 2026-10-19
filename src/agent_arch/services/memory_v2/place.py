@@ -54,12 +54,12 @@ def key_of(place: Any) -> Optional[str]:
 def surface_place(surface: Any) -> Optional[dict]:
     """앱 전용 창 이름 → 저장용 장소 dict. 이름이 없으면 None(장소 없음).
 
-    MES 앱처럼 일반 채팅과 따로 분리된 창은 채널이 아니지만 자리다 — 그 창에서 못 박은
+    전용 앱처럼 일반 채팅과 따로 분리된 창은 채널이 아니지만 자리다 — 그 창에서 못 박은
     규칙이 브라우저 패널까지 따라다니면 기억이 섞인다. 창 이름 판정은 요청 경로가
     소유한다(``source_routing.resolve_memory_surface``).
 
     Args:
-        surface: ``user_info["memory_surface"]`` 값(예 ``"mes"``).
+        surface: ``user_info["memory_surface"]`` 값(예 ``"app"``).
 
     Returns:
         ``{"provider", "channel_id", "is_dm"}`` 또는 None.

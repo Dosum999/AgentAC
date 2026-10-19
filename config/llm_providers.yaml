@@ -37,10 +37,9 @@ providers:
     model: claude-opus-5
     # temperature·top_p 를 적지 않는다 — Claude Opus 4.6 이후 모델은 샘플링 인자를 폐기해
     # 1.0 외의 값은 400 이다(2026-10-12 실측). 적어도 프로바이더가 보내지 않는다(_payload 주석).
-    # Anthropic 은 max_tokens 필수 — 도면 리포트(7섹션)가 잘리지 않을 값으로 둔다.
+    # Anthropic 은 max_tokens 필수 — 긴 리포트가 잘리지 않을 값으로 둔다.
     max_tokens: 16384
     # 2026-10-12 도구 호출(tool_use) 구현 — 에이전트 대화 레인에서 기본 프로바이더로 쓸 수 있다.
-    # 도면 레인은 도구를 바인딩하지 않으므로 이 값과 무관하게 tools 없이 호출된다.
     # 패널·허용목록에서 "claude" 로 적어도 된다(factory 별칭 → anthropic).
     supports_function_calling: true
     supports_streaming: true
@@ -51,66 +50,6 @@ providers:
     max_tokens: 8192
     supports_function_calling: true
     supports_streaming: true
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 도면 분석 전용 레인 (app/services/drawing) — providers.* 와 **분리**한다.
-#
-# 왜 분리하나: providers.gemini 의 thinking_budget=0·top_p 는 에이전트 대화의 도구
-# 체이닝을 위해 맞춰 둔 값이다. 도면 분석은 도구를 쓰지 않고, 회사가 고른 임의의 모델로
-# 돌 수 있다 — 그 모델이 그 인자를 거부하면(실측: gemini-3.5-flash-lite → 400
-# INVALID_ARGUMENT) 판독·판정·후속질의가 전부 죽는다. 반대로 도면 때문에 공용 값을
-# 바꾸면 에이전트 대화가 영향을 받는다. 그래서 레인을 나눈다.
-#
-# 이 레인은 **어디서나 통하는 최소 인자**(모델·메시지·온도·최대토큰)만 쓴다.
-# 온도·최대토큰은 패스별로 코드가 정한다(판독 0.0 / 리포트 0.3 등).
-drawing:
-  provider: gemini
-  # 프로바이더별 기본 모델. 회사가 고른 모델이 있으면 그 값이 우선한다.
-  models:
-    gemini: gemini-2.5-flash
-    anthropic: claude-sonnet-5
-    openai: gpt-5.4-mini
-  # 이 레인이 **자기 값으로** 갖는 튜닝. providers.gemini 를 상속하지 않는다.
-  # 검증된 모델(위 models 목록)에만 적용하고, 회사가 고른 낯선 모델에는 얹지 않는다 —
-  # 얹으면 인자를 거부하는 모델에서 기능이 죽고(실측), 빼면 thinking 이 켜져 판정이
-  # 4.6초 → 13.8초로 느려진다(실측). 그래서 "아는 모델엔 적용, 모르는 모델엔 최소 인자".
-  tuning:
-    thinking_budget: 0
-    top_p: 0.95
-  # 그래도 거부되는 인자가 있으면 그것만 떼고 한 번 더 시도한다(이 레인에서만).
-  param_fallback: true
-
-# SCMS 발주 도면 판독 (app/agents/tools/skills/scms/drawing_read.py) — 위 drawing 레인과 별개.
-# 채널 프로바이더와 무관하게 이 조합으로 고정한다. 판독 정확도는 이 조합으로 골드셋 검증했고,
-# 구조화 출력은 gemini 에서만 켜진다 — 바꾸려면 골드셋을 다시 돌린다. 모델을 비우면 프로바이더 기본 모델.
-scms_readout:
-  provider: gemini
-  model: gemini-3.1-flash-lite
-
-# 전자결재 영수증 OCR (app/agents/tools/skills/eapproval/receipt.py). 비전을 읽는 프로바이더여야 한다.
-receipt_ocr:
-  provider: gemini
-  model: gemini-3.1-flash-lite
-
-# SCMS 전용 봇의 대화 모델 (웹 SCMS 채팅 /scms/agent/* · 메신저 SCMS 봇) — 도구 호출·답변을 이 모델로 한다.
-# 2026-10-16 사용자 결정: SCMS 쪽은 gpt-6.1-sol. 회사 허용 프로바이더 정책은 그대로 거친다(openai 를 막은 회사는
-# 정책 기본값으로 내려간다). SCMS_CHANNEL_LLM_PROVIDER 를 넣으면 그 프로바이더가 우선한다(운영자 비상 스위치) —
-# 그때 모델은 그 프로바이더의 기본 모델이다. 모델을 비우면 프로바이더 기본 모델.
-scms_agent:
-  provider: openai
-  model: gpt-6.1-sol
-  # gpt-6.1-sol 은 Chat Completions 에서 함수 도구를 못 쓴다 — 추론 강도를 주면 "use /v1/responses", 'none' 을 주면
-  # "does not support 'none'" 로 둘 다 400(2026-10-16 실측). 그래서 Responses API 로 부른다(app/llm/openai_responses.py).
-  # 추론 강도는 low~max. low = 도구 판단·짧은 답 위주의 이 채널에 맞춘 값.
-  api: responses
-  reasoning_effort: low
-
-# SCMS 거래 문서 비전 판독 (app/services/scms/deal/documents.py) — 방에 올라온 그림·스캔 PDF 의 글자를 그대로 옮긴다.
-# 품번·수량·금액을 한 글자도 바꾸지 않아야 해서 상위 모델을 쓴다. 비전을 읽는 프로바이더여야 한다. 파일이 외부로 나간다.
-# 켜고 끄기는 SCMS_DEAL_VISION_ENABLED(거래 구조 스위치 뒤). 모델을 비우면 프로바이더 기본 모델.
-scms_deal_vision:
-  provider: gemini
-  model: gemini-3.8-flash
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 장기 사용자 메모리 v2 전용 레인 (app/services/memory_v2) — providers.* 와 **분리**한다.
@@ -147,22 +86,6 @@ worker_overrides:
       max_tokens: 16384
     gemini:
       thinking_budget: 2048
-
-# ChatGPT 위탁 레인 (app/services/chatgpt/delegate.py) — 패널의 답변 방식 '깊이있게 추론'.
-# 이 레인은 우리 도구를 쓰지 않는다. OpenAI 응답 API 의 내장 도구(웹 검색·코드 인터프리터)로 답하고,
-# 만들어진 파일만 우리 file-service 로 옮겨 링크를 준다. providers.openai(대화용 chat.completions)와 별개다.
-chatgpt:
-  model: gpt-5.6-luna            # 5.6 계열의 compact 등급(입력 $0.20 / 출력 $1.20 per 1M, 2026-09-17 가격표). 사용자 선택
-  reasoning_effort: medium       # low|medium|high — high 는 지연이 크게 는다
-  max_output_tokens: 8192
-  timeout_seconds: 300           # 웹을 훑고 코드를 돌리면 분 단위가 된다
-  web_search: true               # 회사 웹 검색 설정이 꺼져 있으면 이 값과 무관하게 꺼진다(옆문 금지)
-  code_interpreter: true         # 계산·차트·파일 생성
-  image_generation: true         # 그림 생성 — 결과 이미지는 file-service 로 옮겨 답변에 인라인으로 건다
-  history_turns: 8
-  history_chars: 4000
-  max_attachments: 5
-  max_attachment_bytes: 20971520
 
 # Fallback chain (LLMFactory.create_with_fallback) — 대화 자동 압축
 # (app/memory/conversation.py:_compact_history)과 app/services/memory/* 가 쓴다.

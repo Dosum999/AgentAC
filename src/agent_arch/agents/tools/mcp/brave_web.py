@@ -26,13 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 class BraveWebTool(RemoteMCPTool):
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        query = str(kwargs.get("query") or "")
-        row = {"title": "[DEMO] 데모 결과", "url": "https://example.com/demo",
-               "content": brave_output.wrap_external_content(f"'{query}' 의 데모 결과입니다. 실제 웹 결과가 아닙니다.", source=self._name)}
-        kind = brave_output.KIND_CONTEXT if self._name == brave_output.CONTEXT_TOOL else brave_output.KIND_RESULTS
-        return ToolResult(success=True, output={"kind": kind, "tool": self._name, "query": query, "count": 1, "results": [row]},
-                          metadata={"tool": self._name, "mode": "demo"})
 
     async def _real_execute(self, **kwargs) -> ToolResult:
         user: Dict[str, Any] = get_user_context() or {}

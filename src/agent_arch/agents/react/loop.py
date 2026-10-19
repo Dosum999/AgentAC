@@ -185,7 +185,7 @@ async def react_loop_events(
             return
 
         # (A안) 자동 사전검색 재검색 제거 — 매 iteration 원본 질의로 top-k 를 다시
-        # 뽑아 무관 도메인 도구(logistics/hr/mail …)를 주입해 모델이 헤매던 원인.
+        # 뽑아 무관 도메인 도구(hr/mail/drive …)를 주입해 모델이 헤매던 원인.
         # 추가 도구 발견은 오직 LLM 이 도메인 탐색 도구(find_<도메인>_tools)를
         # 호출 → 아래 drain_discovered_tools 머지 경로로만 이뤄진다.
 

@@ -126,8 +126,8 @@ class TestOrchestratorRunTokens:
     """orchestrator.run()의 토큰 수 PostgreSQL 저장 검증."""
 
     @pytest.mark.asyncio
-    async def test_demo_mode_tokens_passed_to_save(self):
-        """demo_mode 경로에서 invoke() usage가 save_logged_in_turn에 전달된다."""
+    async def test_direct_path_tokens_passed_to_save(self):
+        """직접 응답 경로에서 invoke() usage가 save_logged_in_turn에 전달된다."""
         orc = _make_orchestrator()
         orc.llm.invoke = AsyncMock(return_value=_make_response("응답", usage=_USAGE))
 
@@ -139,7 +139,6 @@ class TestOrchestratorRunTokens:
              patch("agent_arch.agents.orchestrator.get_current_run_tree", return_value=None), \
              patch("agent_arch.agents.orchestrator.save_logged_in_turn", new=AsyncMock(return_value=("msg-id", "conv-id"))) as mock_save:
 
-            mock_settings.demo_mode = True
             mock_settings.enable_pii_masking = False
             mock_settings.enable_parallel_eval = False
 
@@ -152,7 +151,7 @@ class TestOrchestratorRunTokens:
         assert kw["total_tokens"] == 30
 
     @pytest.mark.asyncio
-    async def test_demo_mode_none_tokens_when_usage_absent(self):
+    async def test_direct_path_none_tokens_when_usage_absent(self):
         """usage가 None이면 save_logged_in_turn에 None 토큰 값이 전달된다."""
         orc = _make_orchestrator()
         orc.llm.invoke = AsyncMock(return_value=_make_response("응답", usage=None))
@@ -165,7 +164,6 @@ class TestOrchestratorRunTokens:
              patch("agent_arch.agents.orchestrator.get_current_run_tree", return_value=None), \
              patch("agent_arch.agents.orchestrator.save_logged_in_turn", new=AsyncMock(return_value=("msg-id", "conv-id"))) as mock_save:
 
-            mock_settings.demo_mode = True
             mock_settings.enable_pii_masking = False
             mock_settings.enable_parallel_eval = False
 
@@ -196,7 +194,6 @@ class TestOrchestratorStreamTokens:
              patch("agent_arch.agents.orchestrator.get_current_run_tree", return_value=None), \
              patch("agent_arch.agents.orchestrator.save_logged_in_turn", new=AsyncMock(return_value=("msg-id", "conv-id"))) as mock_save:
 
-            mock_settings.demo_mode = False
             mock_settings.enable_pii_masking = False
             mock_settings.enable_parallel_eval = False
             mock_settings.max_iterations = 3
@@ -244,7 +241,6 @@ class TestOrchestratorStreamTokens:
              patch("agent_arch.agents.orchestrator.get_current_run_tree", return_value=None), \
              patch("agent_arch.agents.orchestrator.save_logged_in_turn", new=AsyncMock(return_value=("msg-id", "conv-id"))) as mock_save:
 
-            mock_settings.demo_mode = False
             mock_settings.enable_pii_masking = False
             mock_settings.enable_parallel_eval = False
             mock_settings.max_iterations = 3
@@ -283,7 +279,6 @@ class TestFinishReasonPersistence:
              patch("agent_arch.agents.orchestrator.get_current_run_tree", return_value=None), \
              patch("agent_arch.agents.orchestrator.save_logged_in_turn", new=AsyncMock(return_value=("msg-id", "conv-id"))) as mock_save:
 
-            mock_settings.demo_mode = False
             mock_settings.enable_pii_masking = False
             mock_settings.enable_parallel_eval = False
 
@@ -307,7 +302,6 @@ class TestFinishReasonPersistence:
              patch("agent_arch.agents.orchestrator.get_current_run_tree", return_value=None), \
              patch("agent_arch.agents.orchestrator.save_logged_in_turn", new=AsyncMock(return_value=("msg-id", "conv-id"))) as mock_save:
 
-            mock_settings.demo_mode = False
             mock_settings.enable_pii_masking = False
             mock_settings.enable_parallel_eval = False
             mock_settings.max_iterations = 3

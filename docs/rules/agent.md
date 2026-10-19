@@ -49,6 +49,10 @@ flowchart TD
   - `directory_client`: PII 가드 어휘 출처
   - `glossary_source`: 용어 사전 출처. 캐시·매칭·교정은 `services/glossary.py` 가 한다.
   - `mode_prompts`, `guide_tool`: 전용 채널 모드 프롬프트, 가이드 지식베이스 도구
+  - `approval_required`, `action_done_messages`: 업무 도메인의 승인 필요 도구와 완료 문구. 코어 승인 목록은 협업 도메인(일정·메일·메신저·HR) 쓰기 도구만 갖는다.
+  - `followup_builders`: 승인 완료 뒤 후속 제안 빌더
+  - `always_action_domains`, `domain_addenda`: 늘 실행 질의로 보낼 도메인, 도메인별 워커 지침
+  - `eval_sink`: 병렬(그림자) 평가 결과 저장소
 
 ---
 

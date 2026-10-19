@@ -216,7 +216,6 @@ class TestPreprocessRequestImageInjection:
     """_preprocess_request()에서 이미지 컨텍스트 주입 동작 검증."""
 
     def _patch_common(self, mock_settings):
-        mock_settings.demo_mode = True
         mock_settings.enable_pii_masking = False
         mock_settings.enable_parallel_eval = False
 
@@ -373,7 +372,6 @@ class TestStreamImageEvents:
     """stream()에서 이미지 관련 SSE 이벤트 발생 순서 검증."""
 
     def _base_patches(self, mock_settings):
-        mock_settings.demo_mode = True
         mock_settings.enable_pii_masking = False
         mock_settings.enable_parallel_eval = False
         mock_settings.agent_mode = "default"

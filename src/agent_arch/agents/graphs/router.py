@@ -20,7 +20,7 @@ from typing import List, Optional
 
 from agent_arch.core.config import settings
 
-from agent_arch.agents.context import scms_order_enabled, web_search_enabled
+from agent_arch.agents.context import web_search_enabled
 from agent_arch.agents.tools.tool_search import _DOMAIN_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -30,36 +30,21 @@ DOMAINS = tuple(_DOMAIN_TOOLS.keys())
 WEB_DOMAIN = "web"
 
 
-# 메신저 SCMS 발주요청. 웹과 같은 요청 단위 opt-in 도메인이다 — 켜진 요청(메신저 ∧ 허용 회사)에서만
-# 라우터 카드가 나가고 워커가 생긴다. 이 도메인이 없을 때 "발주 넣어줘" 는 회계(매입 전표)나
-# 전자결재(상신)로 갔다(실측 2026-09-23, 네 문장 전부) — 발주요청이라는 선택지가 없었기 때문이다.
-SCMS_ORDER_DOMAIN = "scms_order"
-# 예약 작업 — 전역 기능 플래그(ENABLE_SCHEDULED_JOBS)로 열리고, 예약 실행(무인) 턴에서는 닫힌다.
-SCHEDULE_DOMAIN = "schedule"
-
-
 def domain_available(domain: str) -> bool:
-    """이 요청에서 라우팅·상속할 수 있는 도메인인가. 요청 단위 opt-in 도메인은 플래그가 켜져야 한다."""
+    """이 요청에서 라우팅·상속할 수 있는 도메인인가. 요청 단위 opt-in 도메인은 플래그가 켜져야 한다.
+
+    웹은 코어가 아는 opt-in 도메인이다. 업무 도메인의 opt-in 판정은 확장(extensions.domain_available)이 한다.
+    """
     if domain == WEB_DOMAIN:
         return web_search_enabled()
-    if domain == SCMS_ORDER_DOMAIN:
-        return scms_order_enabled()
     from agent_arch.extensions import domain_available as _ext_available
     return _ext_available(domain)
 
-# supervisor 라우팅에서 제외할 도메인 — 전용 채널(음성 /audio/*, MES 채팅 /agent/mes/*,
-# = logistics 모드)에서만 다루고 그 채널은 supervisor 를 우회하므로
-# (orchestrator._use_supervisor=False), 일반 채널(/agent/*, supervisor)의 router 가 이
-# 도메인으로 라우팅하면 PoC 데모 셋이 일반 웹챗에 새어 노출된다 → router 후보에서
-# 제외한다. 2026-08-24 도메인 스왑: 제외 대상이 logistics(당시 레거시 물류 스킬 도메인)
-# → mes → 같은 날 전용 도메인 mespoc 으로 재이전. logistics 는 물류 MCP 소유가 되어
-# 일반 채팅에 개방됐다.
-# 2026-09-03 운영 비노출: logistics·mes 도 물류 MCP 를 운영에서 끄는 동안 함께 제외한다.
-# 관문을 내려도(tools_config enabled:false) 아래 목록은 _DOMAIN_TOOLS 를 그대로
-# 펼치므로, 빼지 않으면 router 가 도구 0개인 워커로 라우팅해 도구 없이 답을 짓는다.
-# 물류를 운영 개방할 때 이 둘만 되돌린다.
-# 2026-10-07 logistics 운영 재개방(수주서 등록 도입) — mes 는 관문이 닫혀 있어 그대로 제외한다.
-_SUPERVISOR_EXCLUDED_DOMAINS = frozenset({"mespoc", "mes"})
+# supervisor 라우팅에서 제외할 도메인 — 전용 채널(앱 전용 채팅·음성 등)에서만 다루는 도메인.
+# 그 채널은 supervisor 를 우회하므로, 일반 채널의 라우터가 이 도메인으로 보내면 전용 셋이
+# 일반 채팅에 새어 노출된다. 관문을 꺼도(tools_config enabled:false) 도메인 목록은 _DOMAIN_TOOLS 를
+# 그대로 펼치므로, 여기서 빼지 않으면 라우터가 도구 0개인 워커로 보내 도구 없이 답을 짓는다.
+_SUPERVISOR_EXCLUDED_DOMAINS: frozenset[str] = frozenset()
 ROUTABLE_DOMAINS = frozenset(d for d in DOMAINS if d not in _SUPERVISOR_EXCLUDED_DOMAINS)
 
 # find_<domain>_tools 이름 → 도메인 역매핑 (직전 턴 도구에서 도메인 도출용).
@@ -71,17 +56,9 @@ FIND_TOOL_FOR_DOMAIN = {domain: spec[0] for domain, spec in _DOMAIN_TOOLS.items(
 _PREFIX_DOMAIN = {
     "hr_": "hr", "calendar_": "calendar", "mail_": "mail", "mailcow_": "mail",
     "mattermost_": "talk", "drive_": "drive", "nextcloud_": "drive",
-    "eapproval_": "eapproval", "logistics_": "logistics", "memory_": "memory",
-    # scms_order_* = 메신저 전용 발주요청(요청 단위 opt-in). "scms_" 와 달리 웹 SCMS 채널 도구는
-    # 이 접두사를 쓰지 않는다(scms_purchase_order_draft 는 SCMS 웹 전용으로 따로 둔다).
-    "scms_order_": "scms_order",
-    "schedule_": "schedule",
+    "memory_": "memory",
     # 웹 = 브레이브 MCP 도구(brave_*). "web_" 는 과거 대화 이력의 web_search/web_fetch 도메인 상속용으로 유지.
     "brave_": "web", "web_": "web",
-    # mespoc_* = MES 앱 PoC 셋(레거시 물류, 2026-08-24 격리 — 도메인도 전용 mespoc).
-    # "mespoc_" 는 "mes_" 와 startswith 가 겹치지 않으며(언더스코어 위치), "mes_" 는
-    # 과거 대화 이력의 mes_* 도구명 도메인 상속용으로 유지.
-    "mespoc_": "mespoc", "mes_": "mes",
 }
 
 
@@ -121,9 +98,9 @@ def domain_from_tool_names(names) -> Optional[str]:
 
 # 도메인에 귀속돼 있지만 **어느 도메인 워커든** 들어야 하는 읽기 도구.
 # mattermost_read_file 은 메신저(talk) 도메인 도구라 is_domainless_utility 에서 빠진다. 그런데
-# 첨부 파일 읽기는 메신저 일이 아니라 **요청의 재료를 여는 일**이다 — "이 발주서 수주 등록해줘"
-# 는 물류 워커로 가고, 그 워커가 첨부 PDF 를 못 열면 완수가 물리적으로 불가능하다(2026-10-08
-# 실측: `worker domain=logistics WRITE` → `[executor] tool NOT FOUND: mattermost_read_file`
+# 첨부 파일 읽기는 메신저 일이 아니라 **요청의 재료를 여는 일**이다 — "이 주문서로 등록해줘"
+# 는 업무 도메인 워커로 가고, 그 워커가 첨부 PDF 를 못 열면 완수가 물리적으로 불가능하다(2026-10-08
+# 실측: 업무 도메인 WRITE 워커 → `[executor] tool NOT FOUND: mattermost_read_file`
 # → "파일을 읽을 수 없으니 품목을 텍스트로 알려 달라"). 모델은 정확히 호출했고 스코프에만 없었다.
 # 읽기 전용이고 권한은 MCP 서버가 요청자 PAT 로 Mattermost 에 강제하므로 얹어도 side-effect 가 없다.
 CROSS_DOMAIN_READERS = frozenset({"mattermost_read_file"})
@@ -140,7 +117,7 @@ def is_domainless_utility(tool) -> bool:
     제외:
         - 도메인 finder(find_*): 워커가 자기 도메인 것을 _with_domain_finder 로 따로 받음.
         - 도메인 귀속 도구: domain_from_tool_names 가 도메인을 돌려주면 그 도메인 워커의 것.
-        - 스킬(도메인 특화, 모듈이 ``.skills.``): optimization_solve 등. 별도 라우팅 도메인이
+        - 스킬(도메인 특화, 모듈이 ``.skills.``). 별도 라우팅 도메인이
           없어 fallback(모놀리식)으로 처리되므로 워커에 얹을 필요가 없다.
     """
     name = getattr(tool, "name", None)
@@ -217,20 +194,21 @@ def _build_router_system_prompt(prior_domain: Optional[str] = None, prior_domain
         # 관문(find_*)이 tools_config 에서 꺼진 도메인은 카드도 내지 않는다 — 카드만 있고 도구가 없으면
         # 라우터가 그 도메인으로 보내고 워커는 빈 스코프로 폴백해 한 턴을 허비한다.
         # web 은 요청 단위 opt-in(패널 토글 ∧ 회사 설정)이라 전역 설정이 아니라 요청 플래그를 본다.
-        if domain in (WEB_DOMAIN, SCMS_ORDER_DOMAIN, SCHEDULE_DOMAIN):
+        from agent_arch.extensions import extensions as _ext
+        if domain == WEB_DOMAIN or domain in _ext.domain_available:
             if not domain_available(domain):
                 continue
         elif not settings.get_tool_config(_tool).get("enabled", True):
             continue
         if domain in _SUPERVISOR_EXCLUDED_DOMAINS:
-            continue  # 전용 채널 도메인(예: logistics)은 supervisor router 후보에서 제외
+            continue  # 전용 채널 도메인은 supervisor router 후보에서 제외
         ex = " / ".join(examples[:3])
         lines.append(f"- {domain}: {intent}")
         lines.append(f"    예: {ex}")
     if web_search_enabled():
         # 토글을 켠 것은 "사외 정보를 찾아달라"는 **사용자의 명시적 의도**다. 지금까지 그 사실은
         # web 카드를 목록에 낼지만 정하고 분류에는 전달되지 않아, 애매한 질의에서 라우터가
-        # 사내 도메인으로 흘렀다(실측: "epdm·cr polymer 단가 조회" → account conf 0.70,
+        # 사내 도메인으로 흘렀다(실측: "epdm·cr polymer 단가 조회" → 사내 도메인 conf 0.70,
         # 같은 질의를 다음 턴에 다시 물으면 web conf 1.00 — 직전 맥락이 붙어야 교정됐다).
         lines += [
             "",
@@ -266,10 +244,8 @@ def _build_router_system_prompt(prior_domain: Optional[str] = None, prior_domain
         "    · 한 도메인에 둘 다면 둘 다 채운다"
         " (예: '받은 메일 확인하고 보내줘' → subqueries.mail=확인, actions.mail=발송).",
         "    · **첨부 파일을 읽고 그 내용으로 수정·등록·반영해 달라는 요청**도 둘 다다 — 파일 읽기는 subqueries,"
-        " 수정·등록은 actions (예: '변경 발주서야, 수량이 바뀌었어 수정해줘' → subqueries.logistics=첨부 확인,"
-        " actions.logistics=수주서 수정). 끝에 '수정해줘·등록해줘·반영해줘' 가 있으면 확인만으로 끝내지 마라.",
-        "    · **드라이브 엑셀을 물류로 마이그레이션·이관**해 달라는 요청은 actions.logistics 하나다 — 이관 도구가 파일을"
-        " 직접 읽으므로 drive 조회를 넣지 마라 (예: '물류 마이그레이션 폴더 엑셀 물류로 마이그레이션 해줘').",
+        " 수정·등록은 actions (예: '변경된 일정표야, 시간이 바뀌었어 수정해줘' → subqueries.calendar=첨부 확인,"
+        " actions.calendar=일정 수정). 끝에 '수정해줘·등록해줘·반영해줘' 가 있으면 확인만으로 끝내지 마라.",
     ]
     if not settings.supervisor_preserve_original:
         # 레거시(서브쿼리 교체) 전용 보존 규칙 — 워커가 서브쿼리만 보므로 재작성이

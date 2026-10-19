@@ -9,10 +9,10 @@ class CalculatorTool(BaseTool):
     """수학 계산 도구.
 
     기본 산술 연산과 수학 표현식을 지원하는 계산기 도구입니다.
-    외부 API 의존성이 없어 데모/실제 모드 모두 동일하게 동작합니다.
+    외부 API 의존성이 없다.
     """
 
-    # 권한 무관 순수 계산 — 프로필 없는 호스트(SCMS 채널)에서도 노출.
+    # 권한 무관 순수 계산 — 프로필 없는 호스트(외부 시스템 채널)에서도 노출.
     permission_required = PermissionRequirement(
         service="", mode=GateMode.PUBLIC, allow_no_profile=True
     )
@@ -55,18 +55,6 @@ class CalculatorTool(BaseTool):
         """
         return ["expression"]
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        """데모 모드 계산 실행 - 실제와 동일한 수식 계산을 수행한다.
-
-        계산기는 외부 API 의존성이 없으므로 데모/실제 모드 모두 동일하게 동작한다.
-
-        Args:
-            **kwargs: 도구 파라미터 (expression)
-
-        Returns:
-            ToolResult: 계산 결과
-        """
-        return await self._calculate(**kwargs)
 
     async def _real_execute(self, **kwargs) -> ToolResult:
         """실제 모드 계산 실행 - 실제와 동일한 수식 계산을 수행한다.

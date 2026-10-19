@@ -79,59 +79,29 @@ def mail_tool():
 # ── 정책 ──────────────────────────────────────────────────────────────────────
 
 class TestPolicy:
-    def test_approval_set_is_twenty_approval_gated_tools(self):
-        # 전자결재: 상신(create) + 결재 승인/반려(approve/reject, Phase 3)로 10 → 12.
-        # 연락처 저장(mail_save_contact, 명함 OCR → 주소록 쓰기)으로 12 → 13.
-        # SCMS 발주요청 초안(scms_purchase_order_draft)으로 13 → 14. 이건 비가역 액션이
-        # 아니라 "이 값으로 발주요청 화면을 채워라" 승인이다(발주 제출은 사람이 화면에서)
-        # — 그래서 이름이 irreversible 이 아니라 approval_gated 다.
-        # 매입매출전표 dmp_sid 세션 저장(accounting_replay_session_save_voucher,
-        # accounting-replay-mcp — workspace 폴백 없음·/resume 전용)으로 14 → 15.
-        # 사용자 세션으로 실 프론트에 저장 = 비가역이라 승인 필수. 같은 서버의
-        # preview(진입만, 저장 없음)와 create(사이드카 전용, 에이전트 미노출)는 승인 대상이 아니다.
-        # 매입매출전표 수정·삭제(accounting_replay_update_voucher·_delete_voucher)로
-        # 15 → 17. 둘 다 비가역이고, 특히 삭제는 전표와 분개가 함께 지워지는데 **복구
-        # 수단이 없다**(acme 는 soft-delete 가 없어 삭제전표복구 메뉴 자체가 없다).
-        # 메신저 SCMS 발주요청(scms_order_request_draft)으로 17 → 18. 승인되면 요청자 세션으로
-        # SCMS 에 초안이 실제로 남는다(도면 첨부 포함).
-        # 예약 만들기(schedule_create)로 18 → 19. 저장되면 정해진 때마다 그 사람 이름으로 실행된다.
-        # 물류 수주서 등록(logistics_create_sales_order, logistics-mcp — /resume 전용)으로 19 → 20.
-        # 고객 발주서를 읽어 수주서를 실제로 만든다 = 비가역이라 승인 필수.
-        # 물류 수주서 수정(logistics_update_sales_order)으로 20 → 21, 발주서 등록(logistics_create_purchase_orders)으로 22.
-        # 발주서 메일(logistics_send_purchase_order_mail)로 23 — 사외 발송.
-        # 생산지시 변경(logistics_update_production_order)으로 24.
-        # 물류 이관(logistics_migrate_drive_excel)으로 25 — 입고·출고 문서 수백 건 + 재고 반영.
-        # (메신저 SCMS 견적 적재 scms_quote_submit 은 승인 카드가 아니라 scms_card 공급사 카드로 돈다 — 여기 없음.)
-        # 메신저 SCMS 계약서 파트(scms_award·scms_order_change·scms_change_respond)로 25 → 28 — 낙찰·변경 통보·회신·최종 승인.
-        assert len(APPROVAL_REQUIRED_TOOLS) == 28
-        assert requires_approval("scms_award")
-        assert requires_approval("scms_order_change")
-        assert requires_approval("scms_change_respond")
-        assert requires_approval("logistics_migrate_drive_excel")
-        assert requires_approval("logistics_update_production_order")
-        assert requires_approval("logistics_create_purchase_orders")
-        assert requires_approval("logistics_send_purchase_order_mail")
-        assert requires_approval("logistics_create_sales_order")
-        assert requires_approval("logistics_update_sales_order")
-        assert not requires_approval("logistics_list_sales_orders")
-        assert requires_approval("schedule_create")
-        assert not requires_approval("schedule_list")
-        assert not requires_approval("schedule_delete")
-        assert requires_approval("scms_order_request_draft")
-        assert requires_approval("accounting_replay_session_save_voucher")
-        assert requires_approval("accounting_replay_update_voucher")
-        assert requires_approval("accounting_replay_delete_voucher")
-        assert not requires_approval("accounting_replay_preview_voucher")
-        assert not requires_approval("accounting_replay_create_card_voucher")
-        assert requires_approval("scms_purchase_order_draft")
+    def test_core_approval_set_covers_collaboration_writes(self):
+        # 코어는 일반 협업 도메인(일정·메일·메신저·인사)의 쓰기 도구만 안다.
+        assert len(APPROVAL_REQUIRED_TOOLS) == 10
         assert requires_approval("mail_send_message")
         assert requires_approval("mail_save_contact")  # 연락처 저장(쓰기)도 승인 필요
-        assert requires_approval("calendar_update_event")  # 일정 수정도 승인 필요(QA-04)
+        assert requires_approval("calendar_update_event")  # 일정 수정도 승인 필요
         assert requires_approval("calendar_delete_event")
         assert requires_approval("hr_request_attendance_correction")
-        assert requires_approval("eapproval_create_document")  # 전자결재 상신도 승인 필요
-        assert requires_approval("eapproval_approve_document")  # 결재 승인/반려도 확인 카드 필수
-        assert requires_approval("eapproval_reject_document")
+
+    def test_extension_adds_domain_write_tools(self, monkeypatch):
+        """업무 도메인의 쓰기 도구는 확장 슬롯으로 승인 목록에 더한다."""
+        from agent_arch.extensions import extensions
+
+        monkeypatch.setattr(extensions, "approval_required", {"orders_create"})
+        monkeypatch.setattr(extensions, "action_done_messages", {
+            "orders_create": lambda args: "임시저장했어요." if args.get("submit") is False else "등록했어요.",
+        })
+        from agent_arch.agents.hitl.policy import action_done_message
+
+        assert requires_approval("orders_create")
+        assert not requires_approval("orders_list")
+        assert action_done_message("orders_create", {"submit": False}) == "임시저장했어요."
+        assert action_done_message("orders_create", {}) == "등록했어요."
 
     def test_read_tools_do_not_require_approval(self):
         assert not requires_approval("search_colleagues")

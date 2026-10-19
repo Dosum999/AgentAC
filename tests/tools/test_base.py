@@ -1,10 +1,9 @@
 """BaseTool.execute() 테스트.
 
-@traceable 데코레이터 적용 여부, demo/real 모드 분기,
+@traceable 데코레이터 적용 여부, _real_execute 위임,
 ToolResult 반환 구조를 검증한다.
 """
 import pytest
-from unittest.mock import AsyncMock, patch
 from agent_arch.agents.tools.base import BaseTool, ToolResult
 
 
@@ -22,9 +21,6 @@ class _DummyTool(BaseTool):
 
     def get_required_params(self):
         return ["query"]
-
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        return ToolResult(success=True, output="demo_result")
 
     async def _real_execute(self, **kwargs) -> ToolResult:
         return ToolResult(success=True, output="real_result")
@@ -45,42 +41,15 @@ class TestBaseToolTraceable:
 
 
 class TestBaseToolExecuteRouting:
-    """demo_mode에 따른 execute() 분기 검증."""
+    """execute() 는 _real_execute() 로 위임한다."""
 
     @pytest.mark.asyncio
-    async def test_demo_mode_calls_demo_execute(self):
-        """demo_mode=True 일 때 _demo_execute()를 호출한다."""
-        tool = _DummyTool()
-
-        with patch("agent_arch.agents.tools.base.settings") as mock_settings:
-            mock_settings.demo_mode = True
-            result = await tool.execute(query="테스트")
-
-        assert result.success is True
-        assert result.output == "demo_result"
-
-    @pytest.mark.asyncio
-    async def test_real_mode_calls_real_execute(self):
-        """demo_mode=False 일 때 _real_execute()를 호출한다."""
-        tool = _DummyTool()
-
-        with patch("agent_arch.agents.tools.base.settings") as mock_settings:
-            mock_settings.demo_mode = False
-            result = await tool.execute(query="테스트")
-
-        assert result.success is True
-        assert result.output == "real_result"
-
-    @pytest.mark.asyncio
-    async def test_execute_returns_tool_result(self):
-        """execute()의 반환값은 항상 ToolResult 인스턴스다."""
-        tool = _DummyTool()
-
-        with patch("agent_arch.agents.tools.base.settings") as mock_settings:
-            mock_settings.demo_mode = True
-            result = await tool.execute(query="테스트")
+    async def test_execute_calls_real_execute(self):
+        result = await _DummyTool().execute(query="테스트")
 
         assert isinstance(result, ToolResult)
+        assert result.success is True
+        assert result.output == "real_result"
 
     @pytest.mark.asyncio
     async def test_real_execute_default_not_implemented(self):
@@ -91,14 +60,9 @@ class TestBaseToolExecuteRouting:
             def get_description(self): return "최소 도구"
             def get_parameters(self): return {}
             def get_required_params(self): return []
-            async def _demo_execute(self, **kwargs): return ToolResult(success=True, output=None)
             # _real_execute는 재정의하지 않음 (BaseTool 기본 구현 사용)
 
-        tool = _MinimalTool()
-
-        with patch("agent_arch.agents.tools.base.settings") as mock_settings:
-            mock_settings.demo_mode = False
-            result = await tool.execute()
+        result = await _MinimalTool().execute()
 
         assert result.success is False
         assert result.error is not None

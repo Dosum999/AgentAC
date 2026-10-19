@@ -87,12 +87,6 @@ class WebFetchTool(BaseTool):
     def get_required_params(self) -> List[str]:
         return ["url"]
 
-    async def _demo_execute(self, **kwargs) -> ToolResult:
-        url = str(kwargs.get("url") or "https://example.com/")
-        return ToolResult(success=True, output={"url": url, "final_url": url, "status": 200, "extractor": "demo",
-                                                "title": "[DEMO] 페이지", "text": f"[DEMO] '{url}' 의 데모 본문입니다.",
-                                                "externalContent": {"untrusted": True, "source": FETCH_TOOL, "wrapped": True}},
-                          metadata={"tool": FETCH_TOOL, "mode": "demo"})
 
     async def _index_copy(self, url: str, user: dict):
         """막힌 페이지를 검색 인덱스(브레이브 본문 조각)에서 다시 찾는다 — 같은 URL 의 행만 쓴다.

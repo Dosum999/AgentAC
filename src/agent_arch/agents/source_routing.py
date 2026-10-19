@@ -70,9 +70,9 @@ def apply_source_defaults(
 # ── 사용량 관측용 서비스 축 ────────────────────────────────────────────────────
 #
 # "이 사용량이 어느 면에서 났나"를 요청 경로 하나로 판정한다. 지금까지 이 정보는 존재하지만
-# 버려졌다 — `/agent` 와 `/agent/mes`, `/scms/agent`, `/drawing` 은 이미 라우팅 단계에서
+# 버려졌다 — `/agent` 와 `/agent/app`(전용 앱 채널), `/guest` 는 이미 라우팅 단계에서
 # 구분되는데 트레이스에도, DB 에도, 푸시에도 남지 않았다. 그래서 회사별 합계만 있고 "메신저에서
-# 얼마, AI 도면에서 얼마"를 물을 수 없었다.
+# 얼마, 전용 앱에서 얼마"를 물을 수 없었다.
 #
 # 판정 근거를 `X-Source-Path` 헤더가 아니라 **실제 요청 경로**로 둔다 — 그 헤더는 게이트웨이를
 # 경유할 때만 존재해서, 직접 호출이나 웹훅에서는 비어 버린다(그러면 사용량이 통째로 미분류가
@@ -83,12 +83,10 @@ def apply_source_defaults(
 # prefix 를 하드코딩하면 그 값이 환경변수로 바뀌는 순간 조용히 전량 미분류가 된다. 그래서
 # 매핑은 prefix 없는 형태로 두고, 판정 직전에 설정값으로 한 번 벗겨낸다.
 _SERVICE_BY_PREFIX: dict[str, str] = {
-    "/agent/mes": "mes",
-    "/scms/agent": "scms",
-    "/drawing": "drawing",
+    "/agent/app": "app",
     "/guest": "guest",
-    "/agent": "datbi_browser",
-    "/audio": "datbi_browser",
+    "/agent": "browser_panel",
+    "/audio": "browser_panel",
 }
 
 # 메신저(Mattermost) 봇은 HTTP 요청 경로가 웹훅이라 위 매핑으로 판정되지 않는다 —
@@ -103,12 +101,12 @@ SERVICE_MESSENGER = "messenger"
 # 패널까지 따라다니면 기억이 섞인 것이다.
 #
 # 위의 사용량 서비스 축과 **따로** 두는 이유: `/audio` 는 사용량으로는 브라우저 패널
-# (datbi_browser)로 묶여 있는데, 기억의 자리로는 MES 앱 창과 같다 — 앱이 같은 창에서
-# 음성과 채팅을 둘 다 보내고 서버도 두 경로에 같은 봇(apply_logistics_bot)을 물린다.
+# (browser_panel)로 묶여 있는데, 기억의 자리로는 전용 앱 창과 같다 — 앱이 같은 창에서
+# 음성과 채팅을 둘 다 보내고 서버도 두 경로에 같은 채널 봇 구성을 물린다.
 # 두 축을 한 매핑으로 합치면 둘 중 하나가 반드시 틀린다.
 _MEMORY_SURFACE_BY_PREFIX: dict[str, str] = {
-    "/agent/mes": "mes",
-    "/audio": "mes",
+    "/agent/app": "app",
+    "/audio": "app",
 }
 
 
@@ -131,11 +129,11 @@ def resolve_service(path: Optional[str]) -> Optional[str]:
     입력은 `request.url.path` 원본을 그대로 받는다 — 즉 `settings.api_v1_prefix` 가 붙은
     형태다. 매핑 키는 prefix 없는 라우터 경로라 여기서 한 번 벗겨 내고 비교한다.
 
-    가장 긴 매칭 prefix 가 우선한다 — "/agent/mes" 가 "/agent" 보다 먼저 잡혀야 MES 채널
+    가장 긴 매칭 prefix 가 우선한다 — "/agent/app" 가 "/agent" 보다 먼저 잡혀야 전용 앱 채널
     사용량이 브라우저 패널로 섞이지 않는다.
 
     판정하지 못하면 **기본 서비스를 지어내지 않는다.** 미분류로 두면 화면에서 그 버킷을
-    들여다보고 새 면을 발견할 수 있지만, 임의로 datbi_browser 를 붙이면 남의 사용량이
+    들여다보고 새 면을 발견할 수 있지만, 임의로 browser_panel 을 붙이면 남의 사용량이
     브라우저 패널 청구에 조용히 섞인다.
     """
     if not path:
@@ -157,7 +155,7 @@ def resolve_memory_surface(path: Optional[str]) -> Optional[str]:
         path: ``request.url.path`` 원본(API 버전 prefix 포함 가능).
 
     Returns:
-        자리 이름(예 ``"mes"``) 또는 None.
+        자리 이름(예 ``"app"``) 또는 None.
     """
     if not path:
         return None
